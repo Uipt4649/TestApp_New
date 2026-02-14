@@ -22,104 +22,24 @@ struct Event: Identifiable, Equatable {
         lhs.title == rhs.title &&
         lhs.details == rhs.details &&
         lhs.locationName == rhs.locationName
-        // coordinate は比較しない
     }
 }
 
 // MARK: - Calendar View
-//struct CalendarView: View {
-//    @State private var selectedDate: Date? = nil
-//    @State private var currentMonth: Date = Date()
-//    @Binding var events: [Event]  // ←Binding に変更
-//    @State private var showAddEventSheet: Bool = false
-//    @State private var editingEvent: Event? = nil
-//    
-//    let columns = Array(repeating: GridItem(.flexible()), count: 7) // 7列
-//
-//    var body: some View {
-//        NavigationStack {
-//            VStack(spacing: 16) {
-//                // 月タイトル
-//                HStack {
-//                    Button("<") { previousMonth() }
-//                    Spacer()
-//                    Text(monthYearString(currentMonth))
-//                        .font(.title2)
-//                        .bold()
-//                    Spacer()
-//                    Button(">") { nextMonth() }
-//                }
-//                .padding(.horizontal)
-//
-//                // 曜日ヘッダー
-//                let weekdaySymbols = Calendar.current.shortWeekdaySymbols
-//                HStack {
-//                    ForEach(weekdaySymbols, id: \.self) { day in
-//                        Text(day).frame(maxWidth: .infinity)
-//                    }
-//                }
-//
-//                // 日付グリッド
-//                LazyVGrid(columns: columns, spacing: 10) {
-//                    ForEach(daysInMonth(currentMonth), id: \.self) { date in
-//                        Button {
-//                            selectedDate = date
-//                            editingEvent = nil
-//                            showAddEventSheet = true
-//                        } label: {
-//                            VStack(spacing: 4) {
-//                                Text("\(Calendar.current.component(.day, from: date))")
-//                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-//                                    .padding(8)
-//                                    .background(isSelected(date) ? Color.blue.opacity(0.3) : Color.clear)
-//                                    .cornerRadius(8)
-//                                
-//                                // その日のイベントがあるか表示
-//                                if !eventsForDate(date).isEmpty {
-//                                    Circle().fill(Color.red).frame(width: 6, height: 6)
-//                                }
-//                            }
-//                        }
-//                    }
-//                }
-//                .frame(maxHeight: .infinity)
-//            }
-//            .padding()
-//            .navigationTitle("カレンダー")
-//            .navigationBarTitleDisplayMode(.inline)
-//            .sheet(isPresented: $showAddEventSheet) {
-//                AddEventSheet(
-//                    date: selectedDate ?? Date(),
-//                    event: editingEvent,
-//                    onAdd: { newEvent in
-//                        if let editing = editingEvent {
-//                            if let index = events.firstIndex(where: { $0.id == editing.id }) {
-//                                events[index] = newEvent
-//                            }
-//                        } else {
-//                            events.append(newEvent)
-//                        }
-//                    }
-//                )
-//            }
-//        }
-//    }
-
-// MARK: - Calendar View (右上ボタン版)
 struct CalendarView: View {
     @State private var selectedDate: Date? = nil
     @State private var currentMonth: Date = Date()
     @Binding var events: [Event]
     @State private var showAddEventSheet: Bool = false
     @State private var editingEvent: Event? = nil
-    @State private var showChatSheet: Bool = false // チャット用フラグ
+    @State private var showChatSheet: Bool = false
 
     let columns = Array(repeating: GridItem(.flexible()), count: 7)
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 16) {
-                // 月タイトル（ここは既存のまま）
+                // 月タイトル
                 HStack {
                     Button("<") { previousMonth() }
                     Spacer()
@@ -167,10 +87,10 @@ struct CalendarView: View {
             .padding()
             .navigationTitle("カレンダー")
             .navigationBarTitleDisplayMode(.inline)
-            // ★ 右上にボタンを配置するツールバー
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
+                        print("DEBUG: チャットボタンが押されました")
                         showChatSheet = true
                     } label: {
                         Image(systemName: "sparkles.bubble")
@@ -179,12 +99,12 @@ struct CalendarView: View {
                     }
                 }
             }
-            // ★ チャット画面の呼び出し
+            // チャット画面のシート
             .sheet(isPresented: $showChatSheet) {
                 ChatBotView(events: $events)
                     .presentationDetents([.medium, .large])
             }
-            // (既存の AddEventSheet はそのまま)
+            // 予定追加のシート
             .sheet(isPresented: $showAddEventSheet) {
                 AddEventSheet(date: selectedDate ?? Date(), event: editingEvent, onAdd: { newEvent in
                     events.append(newEvent)
@@ -193,7 +113,7 @@ struct CalendarView: View {
         }
     }
   
-    // MARK: - ヘルパー
+    // MARK: - ヘルパー関数
     func daysInMonth(_ date: Date) -> [Date] {
         let calendar = Calendar.current
         guard let range = calendar.range(of: .day, in: .month, for: date),
@@ -233,7 +153,94 @@ struct CalendarView: View {
     }
 }
 
-// MARK: - Add/Edit Event Sheet
+// MARK: - Chat Bot View
+import SwiftUI
+
+struct ChatBotView: View {
+    @Environment(\.dismiss) var dismiss
+    @State private var messages: [ChatMessage] = [
+        ChatMessage(text: "推しの情報を教えて！", isUser: false)
+    ]
+    @State private var inputText = ""
+    @Binding var events: [Event]
+
+    var body: some View {
+        NavigationStack {
+            VStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(messages) { msg in
+                            HStack {
+                                if msg.isUser { Spacer() }
+                                Text(msg.text).padding(12)
+                                    .background(msg.isUser ? Color.blue : Color.gray.opacity(0.15))
+                                    .foregroundColor(msg.isUser ? .white : .primary)
+                                    .cornerRadius(16)
+                                if !msg.isUser { Spacer() }
+                            }
+                        }
+                    }
+                    .padding()
+                }
+                HStack {
+                    TextField("AIに相談...", text: $inputText).textFieldStyle(.roundedBorder)
+                    Button("送信") { sendMessage() }.disabled(inputText.isEmpty)
+                }.padding()
+            }
+            .navigationTitle("アシスタント")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("閉じる") { dismiss() } } }
+        }
+    }
+
+    func sendMessage() {
+        let userMsg = ChatMessage(text: inputText, isUser: true)
+        messages.append(userMsg)
+        let textToSend = inputText
+        inputText = ""
+
+        // URLを8200に統一
+        guard let url = URL(string: "http://127.0.0.1:8200/analyze") else { return }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["text": textToSend])
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("【DEBUG】通信エラー: \(error.localizedDescription)")
+                return
+            }
+            
+            guard let data = data else { return }
+            
+            // 生のデータを表示して確認
+            if let rawString = String(data: data, encoding: .utf8) {
+                print("【DEBUG】サーバーからの生データ: \(rawString)")
+            }
+
+            do {
+                let decoded = try JSONDecoder().decode(AIResult.self, from: data)
+                DispatchQueue.main.async {
+                    let aiResponse = decoded.is_event ? "「\(decoded.title ?? "")」を登録したよ！" : (decoded.details ?? "了解しました。")
+                    messages.append(ChatMessage(text: aiResponse, isUser: false))
+                    
+                    if decoded.is_event, let title = decoded.title, let dateString = decoded.date {
+                        let formatter = ISO8601DateFormatter()
+                        formatter.formatOptions = [.withFullDate, .withDashSeparatorInDate]
+                        if let date = formatter.date(from: dateString) {
+                            events.append(Event(date: date, title: title, details: decoded.details, locationName: decoded.location))
+                        }
+                    }
+                }
+            } catch {
+                print("【DEBUG】解析エラー: \(error)")
+            }
+        }.resume()
+    }
+}
+
+// MARK: - Add/Edit Sheet
 struct AddEventSheet: View {
     @Environment(\.dismiss) var dismiss
     var date: Date
@@ -243,7 +250,6 @@ struct AddEventSheet: View {
     @State private var title: String = ""
     @State private var details: String = ""
     @State private var locationName: String = ""
-    @State private var coordinate: CLLocationCoordinate2D? = nil
 
     var body: some View {
         NavigationStack {
@@ -256,7 +262,7 @@ struct AddEventSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(event == nil ? "追加" : "保存") {
-                        let newEvent = Event(date: date, title: title, details: details, locationName: locationName, coordinate: coordinate)
+                        let newEvent = Event(date: date, title: title, details: details, locationName: locationName)
                         onAdd(newEvent)
                         dismiss()
                     }
@@ -271,88 +277,36 @@ struct AddEventSheet: View {
                     title = event.title
                     details = event.details ?? ""
                     locationName = event.locationName ?? ""
-                    coordinate = event.coordinate
                 }
             }
         }
     }
 }
 
-// MARK: - Chat Bot View
-struct ChatBotView: View {
-    @Environment(\.dismiss) var dismiss
-    @State private var messages: [ChatMessage] = [
-        ChatMessage(text: "推しの最新情報や予定を追加", isUser: false)
-    ]
-    @State private var inputText = ""
-    @Binding var events: [Event]
-
-    var body: some View {
-        NavigationStack {
-            VStack {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ForEach(messages) { msg in
-                            HStack {
-                                if msg.isUser { Spacer() }
-                                Text(msg.text)
-                                    .padding(12)
-                                    .background(msg.isUser ? Color.blue : Color.gray.opacity(0.15))
-                                    .foregroundColor(msg.isUser ? .white : .primary)
-                                    .cornerRadius(16)
-                                if !msg.isUser { Spacer() }
-                            }
-                        }
-                    }
-                    .padding()
-                }
-
-                HStack {
-                    TextField("AIに相談...", text: $inputText)
-                        .textFieldStyle(.roundedBorder)
-                    Button("送信") {
-                        sendMessage()
-                    }
-                    .disabled(inputText.isEmpty)
-                }
-                .padding()
-            }
-            .navigationTitle("推し活アシスタント")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("閉じる") { dismiss() }
-                }
-            }
-        }
-    }
-
-    func sendMessage() {
-        let userMsg = ChatMessage(text: inputText, isUser: true)
-        messages.append(userMsg)
-        
-        let currentText = inputText
-        inputText = ""
-
-        // ここで FastAPI を呼び出す（後のステップで実装）
-        // とりあえず擬似返信
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            messages.append(ChatMessage(text: "「\(currentText)」ですね。解析してカレンダーを確認します", isUser: false))
-        }
-    }
-}
-
-// メッセージの型
+// MARK: - Helper Models
 struct ChatMessage: Identifiable {
     let id = UUID()
     let text: String
     let isUser: Bool
 }
 
+struct AIResult: Codable {
+    let is_event: Bool
+    let title: String?
+    let date: String?
+    let location: String?
+    let details: String?
+}
 
+// MARK: - Preview (修正ポイント)
+struct CalendarPreviewContainer: View {
+    @State var mockEvents: [Event] = []
+    var body: some View {
+        CalendarView(events: $mockEvents)
+    }
+}
 
-// MARK: - Preview
 #Preview {
-    CalendarView(events: .constant([]))
+    CalendarPreviewContainer()
 }
 
