@@ -262,29 +262,31 @@ struct ContentView: View {
     }
 }
 
+
 // MARK: - Tab View
 struct SelectView: View {
     @State private var events: [Event] = []
     @State private var logs: [LogEntry] = []
     @State private var cards: [Card] = []
     
-    // 💡 今どの推しを選択しているかをアプリ全体で共有するための変数
+    // 💡 選択中のアーティストID
     @State private var selectedArtistID: UUID?
-    // 💡 プログラムからタブを切り替えるための変数 (0がHome, 1がCalendar)
+    // 💡 プログラムからタブを切り替えるための変数
     @State private var selectedTab: Int = 0
 
     var body: some View {
-        TabView(selection: $selectedTab) { // 👈 selectionを追加
+        TabView(selection: $selectedTab) {
             
             // Homeタブ
             ContentView(cards: $cards, selectedArtistID: $selectedArtistID, selectedTab: $selectedTab)
                 .tabItem { Label("Home", systemImage: "house.fill") }
-                .tag(0) // 👈 重要：Homeは0番
+                .tag(0)
 
             // Calendarタブ
-            CalendarView(events: $events, selectedArtistID: selectedArtistID)
+            // 💡 修正ポイント: $cards と $selectedArtistID を Binding として渡す
+            CalendarView(events: $events, cards: $cards, selectedArtistID: $selectedArtistID)
                 .tabItem { Label("Calendar", systemImage: "calendar") }
-                .tag(1) // 👈 重要：Calendarは1番
+                .tag(1)
 
             // Eventタブ
             EventView(events: $events)
