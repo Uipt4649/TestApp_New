@@ -289,9 +289,9 @@ struct SelectView: View {
                 .tag(1)
 
             // Eventタブ
-            EventView(events: $events)
-                .tabItem { Label("Event", systemImage: "star.circle") }
-                .tag(2)
+            EventView(events: $events, cards: $cards)
+                    .tabItem { Label("Event", systemImage: "star.circle") }
+                    .tag(2)
 
             // Logタブ
             LogView(logs: $logs)
