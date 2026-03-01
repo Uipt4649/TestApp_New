@@ -9,9 +9,9 @@ import SwiftUI
 
 struct EventView: View {
     @Binding var events: [Event]
-    // 💡 誰の予定か判定するために、アーティスト（カード）の情報も受け取る
+    //誰の予定か判定するために、アーティストの情報も受け取る
     @Binding var cards: [Card]
-
+    
     var body: some View {
         NavigationStack {
             List {
@@ -25,10 +25,10 @@ struct EventView: View {
                     ForEach(sortedEvents) { event in
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
-                                // 💡 どのアーティストの予定かを表示
+                                //どのアーティストの予定かを表示
                                 let artistName = cards.first(where: { $0.id == event.artistID })?.artistName ?? "不明"
                                 let artistColor = cards.first(where: { $0.id == event.artistID })?.backgroundColor ?? .gray
-
+                                
                                 Text(artistName)
                                     .font(.caption2)
                                     .bold()
@@ -44,10 +44,10 @@ struct EventView: View {
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
-
+                            
                             Text(event.title)
                                 .font(.headline)
-
+                            
                             if let details = event.details, !details.isEmpty {
                                 Text(details)
                                     .font(.caption)
@@ -63,19 +63,19 @@ struct EventView: View {
             .navigationTitle("イベント一覧")
         }
     }
-
+    
     // 日付順にソート
     private var sortedEvents: [Event] {
         events.sorted { $0.date < $1.date }
     }
-
+    
     // スワイプ削除
     private func deleteEvent(at offsets: IndexSet) {
         let sorted = sortedEvents
         let idsToDelete = offsets.map { sorted[$0].id }
         events.removeAll { idsToDelete.contains($0.id) }
     }
-
+    
     // 日付表示
     private func smartDateLabel(for date: Date) -> String {
         let calendar = Calendar.current

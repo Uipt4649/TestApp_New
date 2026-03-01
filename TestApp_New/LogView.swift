@@ -19,7 +19,7 @@ struct LogEntry: Identifiable {
 
 // MARK: - Log View
 struct LogView: View {
-   
+    
     @Binding var logs: [LogEntry]
     
     @State private var showAddSheet = false
@@ -176,6 +176,6 @@ struct AddLogSheet: View {
 
 // MARK: - Preview
 #Preview {
-   
+    
     LogView(logs: .constant([]))
 }

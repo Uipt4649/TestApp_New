@@ -42,7 +42,8 @@ struct CalendarView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // --- カレンダーヘッダー ---
+                
+                //カレンダーヘッダー
                 VStack(spacing: 16) {
                     HStack {
                         Button("<") { previousMonth() }
@@ -169,8 +170,12 @@ struct CalendarView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button { showChatSheet = true } label: {
                         ZStack {
-                            Circle().fill(Color.blue).frame(width: 32, height: 32)
-                            Image(systemName: "sparkles.bubble.fill").font(.system(size: 14)).foregroundColor(.white)
+                            Circle()
+                                .fill(Color.blue.gradient)
+                                .frame(width: 36, height: 36)
+                            Image(systemName: "brain.head.profile")
+                                .font(.system(size: 18))
+                                .foregroundColor(.white)
                         }
                     }
                 }
@@ -207,14 +212,13 @@ struct CalendarView: View {
             if let placemark = placemarks?.first {
                 let mapItem = MKMapItem(placemark: MKPlacemark(placemark: placemark))
                 mapItem.name = locationName
-                mapItem.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving])
-            } else if let encodedName = locationName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-                      let url = URL(string: "http://maps.apple.com/?q=\(encodedName)") {
-                UIApplication.shared.open(url)
+                
+                
+                mapItem.openInMaps()
             }
         }
     }
-
+    
     func daysInMonth(_ date: Date) -> [Date] {
         let calendar = Calendar.current
         guard let range = calendar.range(of: .day, in: .month, for: date),
@@ -248,8 +252,9 @@ struct CalendarView: View {
 // MARK: - 3. ChatBotView (追加)
 struct ChatBotView: View {
     @Environment(\.dismiss) var dismiss
-    @State private var messages: [ChatMessage] = [ChatMessage(text: "情報を教えて！", isUser: false)]
+    @State private var messages: [ChatMessage] = [ChatMessage(text: "アーティスト名を教えてね", isUser: false)]
     @State private var inputText = ""
+    @State private var isSearching = false
     @Binding var events: [Event]
     var selectedArtistID: UUID?
     
@@ -268,13 +273,40 @@ struct ChatBotView: View {
                                 if !msg.isUser { Spacer() }
                             }
                         }
+                        
+                        
+                        if isSearching {
+                            HStack {
+                                ProgressView()
+                                    .padding(.leading, 12)
+                                Text("調査中...")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                            }
+                            .padding(.vertical, 4)
+                        }
                     }
                     .padding()
                 }
+                
                 HStack {
-                    TextField("AIに相談...", text: $inputText).textFieldStyle(.roundedBorder)
-                    Button("送信") { sendMessage() }.disabled(inputText.isEmpty)
-                }.padding()
+                    TextField("アーティスト名...", text: $inputText)
+                        .textFieldStyle(.roundedBorder)
+                        .disabled(isSearching)
+                    
+                    Button {
+                        sendMessage()
+                    } label: {
+                        if isSearching {
+                            ProgressView()
+                        } else {
+                            Text("送信")
+                        }
+                    }
+                    .disabled(inputText.isEmpty || isSearching)
+                }
+                .padding()
             }
             .navigationTitle("アシスタント")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("閉じる") { dismiss() } } }
@@ -285,33 +317,109 @@ struct ChatBotView: View {
         let textToSend = inputText
         messages.append(ChatMessage(text: textToSend, isUser: true))
         inputText = ""
+        isSearching = true
         
-        // API呼び出しロジック (既存)
-        guard let url = URL(string: "http://127.0.0.1:8200/analyze") else { return }
+        if textToSend.count < 10 && !textToSend.contains("\n") {
+            fetchOfficialEvents(artistName: textToSend)
+        } else {
+            analyzeWithGemini(text: textToSend)
+        }
+    }
+    
+    // 1. アーティスト名から一括検索
+    func fetchOfficialEvents(artistName: String) {
+        guard let encodedName = artistName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "http://localhost:8201/artist_events?artist_name=\(encodedName)") else {
+            isSearching = false
+            return
+        }
+        
+        URLSession.shared.dataTask(with: url) { data, _, error in
+            DispatchQueue.main.async {
+                self.isSearching = false
+                guard let data = data else {
+                    messages.append(ChatMessage(text: "通信エラーが発生したよ。", isUser: false))
+                    return
+                }
+                do {
+                    let decodedList = try JSONDecoder().decode([AIResult].self, from: data)
+                    let validEvents = decodedList.filter { $0.is_event }
+                    
+                    if validEvents.isEmpty {
+                        messages.append(ChatMessage(text: "\(artistName)の確定した予定は見は見つからなかったよ。公式サイトなどを確認してみてね。", isUser: false))
+                        return
+                    }
+                    
+                    var count = 0
+                    for item in validEvents {
+                        if let dateString = item.date, let date = parseDate(dateString) {
+                            if !events.contains(where: { $0.title == item.title && Calendar.current.isDate($0.date, inSameDayAs: date) }) {
+                                let newEvent = Event(
+                                    artistID: selectedArtistID ?? UUID(),
+                                    date: date,
+                                    title: item.title ?? "ライブ",
+                                    details: item.details,
+                                    locationName: item.location
+                                )
+                                events.append(newEvent)
+                                count += 1
+                            }
+                        }
+                    }
+                    messages.append(ChatMessage(text: "\(artistName)のライブを\(count)件登録したよ！", isUser: false))
+                } catch {
+                    messages.append(ChatMessage(text: "解析に失敗しちゃった。", isUser: false))
+                }
+            }
+        }.resume()
+    }
+    
+    // 2. 自由テキスト解析 (POST /analyze)
+    func analyzeWithGemini(text: String) {
+        guard let url = URL(string: "http://localhost:8201/analyze") else {
+            isSearching = false
+            return
+        }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["text": textToSend])
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["text": text])
         
         URLSession.shared.dataTask(with: request) { data, _, _ in
-            guard let data = data else { return }
-            do {
-                let decoded = try JSONDecoder().decode(AIResult.self, from: data)
-                DispatchQueue.main.async {
-                    let aiResponse = decoded.is_event ? "「\(decoded.title ?? "")」を登録したよ！" : (decoded.details ?? "了解しました。")
-                    messages.append(ChatMessage(text: aiResponse, isUser: false))
+            DispatchQueue.main.async {
+                self.isSearching = false
+                guard let data = data else { return }
+                do {
+                    let decoded = try JSONDecoder().decode(AIResult.self, from: data)
+                    let responseText = decoded.is_event ? "「\(decoded.title ?? "")」を登録したよ！" : (decoded.details ?? "解析できなかったよ。")
+                    messages.append(ChatMessage(text: responseText, isUser: false))
                     
-                    if decoded.is_event, let title = decoded.title, let dateString = decoded.date {
-                        let formatter = ISO8601DateFormatter()
-                        formatter.formatOptions = [.withFullDate, .withDashSeparatorInDate]
-                        if let date = formatter.date(from: dateString) {
-                            let newEvent = Event(artistID: selectedArtistID ?? UUID(), date: date, title: title, details: decoded.details, locationName: decoded.location)
-                            events.append(newEvent)
-                        }
+                    if decoded.is_event, let dateString = decoded.date, let date = parseDate(dateString) {
+                        let newEvent = Event(
+                            artistID: selectedArtistID ?? UUID(),
+                            date: date,
+                            title: decoded.title ?? "ライブ",
+                            details: decoded.details,
+                            locationName: decoded.location
+                        )
+                        events.append(newEvent)
                     }
+                } catch {
+                    messages.append(ChatMessage(text: "エラーが起きたよ。", isUser: false))
                 }
-            } catch { print("Error: \(error)") }
+            }
         }.resume()
+    }
+    
+    func parseDate(_ dateString: String) -> Date? {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        let formats = ["yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd"]
+        for format in formats {
+            formatter.dateFormat = format
+            if let date = formatter.date(from: dateString) { return date }
+        }
+        return nil
     }
 }
 
@@ -326,6 +434,11 @@ struct AddEventSheet: View {
     @State private var title: String = ""
     @State private var details: String = ""
     @State private var locationName: String = ""
+    @State private var notifyTime = Date()
+    @State private var isNotificationOn = false
+    @State private var showAlert = false
+    @State private var alertMessage = ""
+    
     
     var body: some View {
         NavigationStack {
@@ -333,16 +446,80 @@ struct AddEventSheet: View {
                 Section("タイトル") { TextField("タイトル", text: $title) }
                 Section("詳細") { TextEditor(text: $details).frame(height: 100) }
                 Section("場所") { TextField("場所の名前", text: $locationName) }
+                DatePicker(
+                    "通知時間",
+                    selection: $notifyTime,
+                    displayedComponents: .hourAndMinute
+                )
+                Toggle("通知をONにする", isOn: $isNotificationOn)
+                    .onChange(of: isNotificationOn) { newValue in
+                        if newValue {
+                            NotificationManager.shared.requestPermission { granted in
+                                if !granted {
+                                    isNotificationOn = false
+                                }
+                            }
+                        }
+                    }
+                .datePickerStyle(.wheel)
+                
             }
             .navigationTitle(event == nil ? "予定を追加" : "予定を編集")
             .toolbar {
+                
                 ToolbarItem(placement: .confirmationAction) {
                     Button(event == nil ? "追加" : "保存") {
-                        let newEvent = Event(artistID: selectedArtistID ?? UUID(), date: date, title: title, details: details, locationName: locationName)
+                        let newEvent = Event(
+                            artistID: selectedArtistID ?? UUID(),
+                            date: date,
+                            title: title,
+                            details: details,
+                            locationName: locationName
+                        )
+                        let calendar = Calendar.current
+                        
+                        let eventDateComponents = calendar.dateComponents(
+                            [.year, .month, .day],
+                            from: newEvent.date
+                        )
+                        
+                        let timeComponents = calendar.dateComponents(
+                            [.hour, .minute],
+                            from: notifyTime
+                        )
+                        
+                        var combined = DateComponents()
+                        combined.year = eventDateComponents.year
+                        combined.month = eventDateComponents.month
+                        combined.day = eventDateComponents.day
+                        combined.hour = timeComponents.hour
+                        combined.minute = timeComponents.minute
+                        
+                        let finalNotifyDate = calendar.date(from: combined)!
+                        
                         onAdd(newEvent)
-                        dismiss()
-                    }.disabled(title.isEmpty)
+
+                        if isNotificationOn {
+                            NotificationManager.shared.scheduleNotification(at: finalNotifyDate) { scheduledDate in
+                                if let scheduledDate = scheduledDate {
+                                    let formatter = DateFormatter()
+                                    formatter.dateFormat = "yyyy年M月d日 HH:mm"
+                                    alertMessage = "\(formatter.string(from: scheduledDate)) に通知を送信します。"
+                                } else {
+                                    alertMessage = "通知の設定に失敗しました。"
+                                }
+                                
+                                showAlert = true
+                            }
+                        } else {
+                            dismiss()
+                            
+                        }
+                        
+                    }
+                    .disabled(title.isEmpty)
                 }
+                
                 ToolbarItem(placement: .cancellationAction) { Button("キャンセル") { dismiss() } }
             }
             .onAppear {
@@ -352,6 +529,13 @@ struct AddEventSheet: View {
                     locationName = event.locationName ?? ""
                 }
             }
+            .alert("通知設定", isPresented: $showAlert) {
+                Button("OK") {
+                    dismiss()
+                }
+            } message: {
+                Text(alertMessage)
+            }
         }
     }
 }
@@ -360,9 +544,43 @@ struct AddEventSheet: View {
 struct ChatMessage: Identifiable {
     let id = UUID(); let text: String; let isUser: Bool
 }
+// Bandsintown APIからの複数イベント用
+struct ArtistEvent: Codable {
+    let is_event: Bool
+    let title: String
+    let date: String
+    let location: String
+    let details: String
+}
 
 struct AIResult: Codable {
-    let is_event: Bool; let title: String?; let date: String?; let location: String?; let details: String?
+    
+    let is_event: Bool
+    let title: String?
+    let date: String?
+    let location: String?
+    let details: String?
+    
+    
+    enum CodingKeys: String, CodingKey {
+        case is_event, title, date, location, details
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        if let boolVal = try? container.decode(Bool.self, forKey: .is_event) {
+            is_event = boolVal
+        } else if let stringVal = try? container.decode(String.self, forKey: .is_event) {
+            is_event = (stringVal.lowercased() == "true")
+        } else {
+            is_event = false
+        }
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        date = try container.decodeIfPresent(String.self, forKey: .date)
+        location = try container.decodeIfPresent(String.self, forKey: .location)
+        details = try container.decodeIfPresent(String.self, forKey: .details)
+    }
 }
 
 // MARK: - Preview

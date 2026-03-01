@@ -9,11 +9,21 @@ import SwiftUI
 
 @main
 struct TestAppApp: App {
+    
+    init() {
+        NotificationManager.shared.requestPermission { granted in
+            print("通知許可: \(granted)")
+        }
+    }
 
     var body: some Scene {
         WindowGroup {
-            
+
             SelectView()
         }
     }
+    
+    
 }
+
+

@@ -22,10 +22,10 @@ struct CardView: View {
     let geo: GeometryProxy
     let onDelete: () -> Void
     let onEdit: () -> Void
-    let onOpenCalendar: () -> Void // 💡 追加：カレンダーを開くアクション
-
+    let onOpenCalendar: () -> Void //追加：カレンダーを開くアクション
+    
     @State private var showDeleteAlert = false
-
+    
     var body: some View {
         GeometryReader { cardGeo in
             let screenCenterX = geo.size.width / 2
@@ -33,10 +33,10 @@ struct CardView: View {
             let distance = cardCenterX - screenCenterX
             let progress = distance / geo.size.width
             let angle = -Double(progress) * 30
-
+            
             ZStack(alignment: .topTrailing) {
                 card.backgroundColor
-
+                
                 VStack(spacing: 16) {
                     if let image = card.image {
                         Image(uiImage: image)
@@ -54,12 +54,12 @@ struct CardView: View {
                                     .foregroundColor(.secondary)
                             )
                     }
-
+                    
                     Text(card.artistName)
                         .font(.title)
                         .bold()
                         .padding(.horizontal)
-
+                    
                     if let description = card.description {
                         ScrollView(.vertical, showsIndicators: true) {
                             Text(description)
@@ -71,12 +71,12 @@ struct CardView: View {
                         .cornerRadius(10)
                         .padding(.horizontal)
                     }
-
+                    
                     Spacer()
-
-                    // 💡 ボタンを書き換え
+                    
+                    //ボタンを書き換え
                     Button {
-                        onOpenCalendar() // 👈 ここでカレンダーを開く処理を呼ぶ
+                        onOpenCalendar() //カレンダーを開く処理を呼ぶ
                     } label: {
                         Label("カレンダーを開く", systemImage: "calendar")
                             .frame(maxWidth: .infinity)
@@ -87,14 +87,14 @@ struct CardView: View {
                     .padding(.bottom)
                 }
                 .frame(width: geo.size.width * 0.9, height: geo.size.height * 0.95)
-
+                
                 HStack(spacing: 16) {
                     Button { onEdit() } label: {
                         Image(systemName: "pencil.circle.fill")
                             .font(.title)
                             .foregroundColor(.blue)
                     }
-
+                    
                     Button { showDeleteAlert = true } label: {
                         Image(systemName: "trash.circle.fill")
                             .font(.title)
@@ -119,7 +119,7 @@ struct CardView: View {
 struct AddCardView: View {
     let geo: GeometryProxy
     let action: () -> Void
-
+    
     var body: some View {
         Button {
             action()
@@ -148,10 +148,10 @@ struct AddCardSheet: View {
     @State private var backgroundColor: Color = .blue
     @State private var selectedItem: PhotosPickerItem?
     @State private var image: UIImage?
-
+    
     let onAdd: (Card) -> Void
     var editingCard: Card? = nil
-
+    
     var body: some View {
         NavigationStack {
             Form {
@@ -202,14 +202,14 @@ struct AddCardSheet: View {
 struct ContentView: View {
     @Binding var cards: [Card]
     
-    // 💡 SelectViewから受け取る変数
+    //SelectViewから受け取る変数
     @Binding var selectedArtistID: UUID?
     @Binding var selectedTab: Int
     
     @State private var showAddSheet = false
     @State private var editingCard: Card? = nil
     @State private var currentIndex: Int = 0
-
+    
     var body: some View {
         GeometryReader { geo in
             ScrollViewReader { scrollProxy in
@@ -224,7 +224,7 @@ struct ContentView: View {
                                     editingCard = card
                                     showAddSheet = true
                                 },
-                                onOpenCalendar: { // 💡 ここで ID をセットしてタブを切り替える
+                                onOpenCalendar: { //ここで IDをセットしてタブを切り替える
                                     selectedArtistID = card.id
                                     withAnimation {
                                         selectedTab = 1 // Calendarタブへ移動
@@ -233,7 +233,7 @@ struct ContentView: View {
                             )
                             .id(index)
                         }
-
+                        
                         AddCardView(geo: geo) {
                             editingCard = nil
                             showAddSheet = true
@@ -269,11 +269,11 @@ struct SelectView: View {
     @State private var logs: [LogEntry] = []
     @State private var cards: [Card] = []
     
-    // 💡 選択中のアーティストID
+    //選択中のアーティストID
     @State private var selectedArtistID: UUID?
-    // 💡 プログラムからタブを切り替えるための変数
+    //プログラムからタブを切り替えるための変数
     @State private var selectedTab: Int = 0
-
+    
     var body: some View {
         TabView(selection: $selectedTab) {
             
@@ -281,18 +281,18 @@ struct SelectView: View {
             ContentView(cards: $cards, selectedArtistID: $selectedArtistID, selectedTab: $selectedTab)
                 .tabItem { Label("Home", systemImage: "house.fill") }
                 .tag(0)
-
+            
             // Calendarタブ
-            // 💡 修正ポイント: $cards と $selectedArtistID を Binding として渡す
+            //$cards と $selectedArtistID を Binding として渡す
             CalendarView(events: $events, cards: $cards, selectedArtistID: $selectedArtistID)
                 .tabItem { Label("Calendar", systemImage: "calendar") }
                 .tag(1)
-
+            
             // Eventタブ
             EventView(events: $events, cards: $cards)
-                    .tabItem { Label("Event", systemImage: "star.circle") }
-                    .tag(2)
-
+                .tabItem { Label("Event", systemImage: "star.circle") }
+                .tag(2)
+            
             // Logタブ
             LogView(logs: $logs)
                 .tabItem { Label("Log", systemImage: "square.and.pencil") }
