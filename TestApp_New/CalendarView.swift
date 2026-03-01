@@ -252,12 +252,15 @@ struct CalendarView: View {
 // MARK: - 3. ChatBotView (追加)
 struct ChatBotView: View {
     @Environment(\.dismiss) var dismiss
-    @State private var messages: [ChatMessage] = [ChatMessage(text: "アーティスト名を教えてね", isUser: false)]
+    @State private var messages: [ChatMessage] = [ChatMessage(text: "アーティスト名やイベント情報を教えてね", isUser: false)]
     @State private var inputText = ""
     @State private var isSearching = false
     @Binding var events: [Event]
     var selectedArtistID: UUID?
     
+    // APIキーは適切に管理してください
+    let apiKey = "app-qeFpWiJUGrwqhjX0ClgOi1au"
+
     var body: some View {
         NavigationStack {
             VStack {
@@ -273,155 +276,264 @@ struct ChatBotView: View {
                                 if !msg.isUser { Spacer() }
                             }
                         }
-                        
-                        
                         if isSearching {
-                            HStack {
-                                ProgressView()
-                                    .padding(.leading, 12)
-                                Text("調査中...")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                Spacer()
-                            }
-                            .padding(.vertical, 4)
+                            HStack { ProgressView().padding(.leading, 12); Text("Difyが思考中...").font(.caption).foregroundColor(.secondary); Spacer() }
                         }
-                    }
-                    .padding()
+                    }.padding()
                 }
                 
                 HStack {
-                    TextField("アーティスト名...", text: $inputText)
+                    TextField("アーティスト名や予定...", text: $inputText)
                         .textFieldStyle(.roundedBorder)
                         .disabled(isSearching)
-                    
-                    Button {
-                        sendMessage()
-                    } label: {
-                        if isSearching {
-                            ProgressView()
-                        } else {
-                            Text("送信")
-                        }
-                    }
-                    .disabled(inputText.isEmpty || isSearching)
-                }
-                .padding()
+                    Button("送信") { sendMessage() }
+                        .disabled(inputText.isEmpty || isSearching)
+                }.padding()
             }
-            .navigationTitle("アシスタント")
+            .navigationTitle("AIアシスタント")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("閉じる") { dismiss() } } }
         }
     }
     
     func sendMessage() {
-        let textToSend = inputText
-        messages.append(ChatMessage(text: textToSend, isUser: true))
+        let text = inputText
+        messages.append(ChatMessage(text: text, isUser: true))
         inputText = ""
         isSearching = true
-        
-        if textToSend.count < 10 && !textToSend.contains("\n") {
-            fetchOfficialEvents(artistName: textToSend)
-        } else {
-            analyzeWithGemini(text: textToSend)
-        }
+        fetchFromDify(text: text)
     }
     
-    // 1. アーティスト名から一括検索
-    func fetchOfficialEvents(artistName: String) {
-        guard let encodedName = artistName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "http://localhost:8201/artist_events?artist_name=\(encodedName)") else {
-            isSearching = false
-            return
-        }
-        
-        URLSession.shared.dataTask(with: url) { data, _, error in
-            DispatchQueue.main.async {
-                self.isSearching = false
-                guard let data = data else {
-                    messages.append(ChatMessage(text: "通信エラーが発生したよ。", isUser: false))
-                    return
-                }
-                do {
-                    let decodedList = try JSONDecoder().decode([AIResult].self, from: data)
-                    let validEvents = decodedList.filter { $0.is_event }
-                    
-                    if validEvents.isEmpty {
-                        messages.append(ChatMessage(text: "\(artistName)の確定した予定は見は見つからなかったよ。公式サイトなどを確認してみてね。", isUser: false))
-                        return
-                    }
-                    
-                    var count = 0
-                    for item in validEvents {
-                        if let dateString = item.date, let date = parseDate(dateString) {
-                            if !events.contains(where: { $0.title == item.title && Calendar.current.isDate($0.date, inSameDayAs: date) }) {
-                                let newEvent = Event(
-                                    artistID: selectedArtistID ?? UUID(),
-                                    date: date,
-                                    title: item.title ?? "ライブ",
-                                    details: item.details,
-                                    locationName: item.location
-                                )
-                                events.append(newEvent)
-                                count += 1
-                            }
-                        }
-                    }
-                    messages.append(ChatMessage(text: "\(artistName)のライブを\(count)件登録したよ！", isUser: false))
-                } catch {
-                    messages.append(ChatMessage(text: "解析に失敗しちゃった。", isUser: false))
-                }
-            }
-        }.resume()
-    }
-    
-    // 2. 自由テキスト解析 (POST /analyze)
-    func analyzeWithGemini(text: String) {
-        guard let url = URL(string: "http://localhost:8201/analyze") else {
-            isSearching = false
-            return
-        }
+    // Dify APIを直接呼び出す
+    func fetchFromDify(text: String) {
+        guard let url = URL(string: "https://api.dify.ai/v1/chat-messages") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["text": text])
+        
+        let body: [String: Any] = [
+            "inputs": [:],
+            "query": text,
+            "response_mode": "blocking",
+            "user": "ios_client"
+        ]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         
         URLSession.shared.dataTask(with: request) { data, _, _ in
-            DispatchQueue.main.async {
-                self.isSearching = false
-                guard let data = data else { return }
-                do {
-                    let decoded = try JSONDecoder().decode(AIResult.self, from: data)
-                    let responseText = decoded.is_event ? "「\(decoded.title ?? "")」を登録したよ！" : (decoded.details ?? "解析できなかったよ。")
-                    messages.append(ChatMessage(text: responseText, isUser: false))
-                    
-                    if decoded.is_event, let dateString = decoded.date, let date = parseDate(dateString) {
-                        let newEvent = Event(
-                            artistID: selectedArtistID ?? UUID(),
-                            date: date,
-                            title: decoded.title ?? "ライブ",
-                            details: decoded.details,
-                            locationName: decoded.location
-                        )
-                        events.append(newEvent)
-                    }
-                } catch {
-                    messages.append(ChatMessage(text: "エラーが起きたよ。", isUser: false))
-                }
+            guard let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let answer = json["answer"] as? String else {
+                DispatchQueue.main.async { self.isSearching = false; self.messages.append(ChatMessage(text: "通信エラーが発生したよ", isUser: false)) }
+                return
             }
+            handleDifyResponse(jsonString: answer)
         }.resume()
+    }
+    
+    // 返ってきた文字列（JSON）をパースしてイベント追加
+    func handleDifyResponse(jsonString: String) {
+        DispatchQueue.main.async {
+            self.isSearching = false
+            // JSONの前後にある不要な改行などを除去
+            let cleanJson = jsonString.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let data = cleanJson.data(using: .utf8),
+                  let result = try? JSONDecoder().decode(AIResult.self, from: data) else {
+                self.messages.append(ChatMessage(text: jsonString, isUser: false))
+                return
+            }
+            
+            if result.is_event, let dateString = result.date, let date = parseDate(dateString) {
+                let newEvent = Event(artistID: selectedArtistID ?? UUID(), date: date, title: result.title ?? "ライブ", details: result.details, locationName: result.location)
+                events.append(newEvent)
+                messages.append(ChatMessage(text: "「\(result.title ?? "イベント")」を追加したよ！", isUser: false))
+            } else {
+                messages.append(ChatMessage(text: result.details ?? "イベント情報は見つからなかったよ", isUser: false))
+            }
+        }
     }
     
     func parseDate(_ dateString: String) -> Date? {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        let formats = ["yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd"]
-        for format in formats {
+        let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX")
+        for format in ["yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd"] {
             formatter.dateFormat = format
             if let date = formatter.date(from: dateString) { return date }
         }
         return nil
     }
 }
+
+//struct ChatBotView: View {
+//    @Environment(\.dismiss) var dismiss
+//    @State private var messages: [ChatMessage] = [ChatMessage(text: "アーティスト名を教えてね", isUser: false)]
+//    @State private var inputText = ""
+//    @State private var isSearching = false
+//    @Binding var events: [Event]
+//    var selectedArtistID: UUID?
+//    
+//    var body: some View {
+//        NavigationStack {
+//            VStack {
+//                ScrollView {
+//                    VStack(alignment: .leading, spacing: 12) {
+//                        ForEach(messages) { msg in
+//                            HStack {
+//                                if msg.isUser { Spacer() }
+//                                Text(msg.text).padding(12)
+//                                    .background(msg.isUser ? Color.blue : Color.gray.opacity(0.15))
+//                                    .foregroundColor(msg.isUser ? .white : .primary)
+//                                    .cornerRadius(16)
+//                                if !msg.isUser { Spacer() }
+//                            }
+//                        }
+//                        
+//                        
+//                        if isSearching {
+//                            HStack {
+//                                ProgressView()
+//                                    .padding(.leading, 12)
+//                                Text("調査中...")
+//                                    .font(.caption)
+//                                    .foregroundColor(.secondary)
+//                                Spacer()
+//                            }
+//                            .padding(.vertical, 4)
+//                        }
+//                    }
+//                    .padding()
+//                }
+//                
+//                HStack {
+//                    TextField("アーティスト名...", text: $inputText)
+//                        .textFieldStyle(.roundedBorder)
+//                        .disabled(isSearching)
+//                    
+//                    Button {
+//                        sendMessage()
+//                    } label: {
+//                        if isSearching {
+//                            ProgressView()
+//                        } else {
+//                            Text("送信")
+//                        }
+//                    }
+//                    .disabled(inputText.isEmpty || isSearching)
+//                }
+//                .padding()
+//            }
+//            .navigationTitle("アシスタント")
+//            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("閉じる") { dismiss() } } }
+//        }
+//    }
+//    
+//    func sendMessage() {
+//        let textToSend = inputText
+//        messages.append(ChatMessage(text: textToSend, isUser: true))
+//        inputText = ""
+//        isSearching = true
+//        
+//        if textToSend.count < 10 && !textToSend.contains("\n") {
+//            fetchOfficialEvents(artistName: textToSend)
+//        } else {
+//            analyzeWithGemini(text: textToSend)
+//        }
+//    }
+//    
+//    // 1. アーティスト名から一括検索
+//    func fetchOfficialEvents(artistName: String) {
+//        guard let encodedName = artistName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+//              let url = URL(string: "http://localhost:8201/artist_events?artist_name=\(encodedName)") else {
+//            isSearching = false
+//            return
+//        }
+//        
+//        URLSession.shared.dataTask(with: url) { data, _, error in
+//            DispatchQueue.main.async {
+//                self.isSearching = false
+//                guard let data = data else {
+//                    messages.append(ChatMessage(text: "通信エラーが発生したよ。", isUser: false))
+//                    return
+//                }
+//                do {
+//                    let decodedList = try JSONDecoder().decode([AIResult].self, from: data)
+//                    let validEvents = decodedList.filter { $0.is_event }
+//                    
+//                    if validEvents.isEmpty {
+//                        messages.append(ChatMessage(text: "\(artistName)の確定した予定は見は見つからなかったよ。公式サイトなどを確認してみてね。", isUser: false))
+//                        return
+//                    }
+//                    
+//                    var count = 0
+//                    for item in validEvents {
+//                        if let dateString = item.date, let date = parseDate(dateString) {
+//                            if !events.contains(where: { $0.title == item.title && Calendar.current.isDate($0.date, inSameDayAs: date) }) {
+//                                let newEvent = Event(
+//                                    artistID: selectedArtistID ?? UUID(),
+//                                    date: date,
+//                                    title: item.title ?? "ライブ",
+//                                    details: item.details,
+//                                    locationName: item.location
+//                                )
+//                                events.append(newEvent)
+//                                count += 1
+//                            }
+//                        }
+//                    }
+//                    messages.append(ChatMessage(text: "\(artistName)のライブを\(count)件登録したよ！", isUser: false))
+//                } catch {
+//                    messages.append(ChatMessage(text: "解析に失敗しちゃった。", isUser: false))
+//                }
+//            }
+//        }.resume()
+//    }
+//    
+//    // 2. 自由テキスト解析 (POST /analyze)
+//    func analyzeWithGemini(text: String) {
+//        guard let url = URL(string: "http://localhost:8201/analyze") else {
+//            isSearching = false
+//            return
+//        }
+//        var request = URLRequest(url: url)
+//        request.httpMethod = "POST"
+//        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+//        request.httpBody = try? JSONSerialization.data(withJSONObject: ["text": text])
+//        
+//        URLSession.shared.dataTask(with: request) { data, _, _ in
+//            DispatchQueue.main.async {
+//                self.isSearching = false
+//                guard let data = data else { return }
+//                do {
+//                    let decoded = try JSONDecoder().decode(AIResult.self, from: data)
+//                    let responseText = decoded.is_event ? "「\(decoded.title ?? "")」を登録したよ！" : (decoded.details ?? "解析できなかったよ。")
+//                    messages.append(ChatMessage(text: responseText, isUser: false))
+//                    
+//                    if decoded.is_event, let dateString = decoded.date, let date = parseDate(dateString) {
+//                        let newEvent = Event(
+//                            artistID: selectedArtistID ?? UUID(),
+//                            date: date,
+//                            title: decoded.title ?? "ライブ",
+//                            details: decoded.details,
+//                            locationName: decoded.location
+//                        )
+//                        events.append(newEvent)
+//                    }
+//                } catch {
+//                    messages.append(ChatMessage(text: "エラーが起きたよ。", isUser: false))
+//                }
+//            }
+//        }.resume()
+//    }
+//    
+//    func parseDate(_ dateString: String) -> Date? {
+//        let formatter = DateFormatter()
+//        formatter.locale = Locale(identifier: "en_US_POSIX")
+//        let formats = ["yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd"]
+//        for format in formats {
+//            formatter.dateFormat = format
+//            if let date = formatter.date(from: dateString) { return date }
+//        }
+//        return nil
+//    }
+//}
 
 // MARK: - 4. AddEventSheet (追加)
 struct AddEventSheet: View {
