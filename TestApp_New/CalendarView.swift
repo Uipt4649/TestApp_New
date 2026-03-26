@@ -35,6 +35,12 @@ struct CalendarView: View {
 
     let columns = Array(repeating: GridItem(.flexible()), count: 7)
     
+    //西暦を算出
+    var calender = Calendar(identifier: .gregorian)
+    
+    
+    
+    
     var currentArtistName: String {
         cards.first(where: { $0.id == selectedArtistID })?.artistName ?? "アーティスト"
     }
