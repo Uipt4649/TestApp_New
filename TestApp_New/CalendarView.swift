@@ -32,7 +32,7 @@ struct CalendarView: View {
     @State private var showAddEventSheet: Bool = false
     @State private var editingEvent: Event? = nil
     @State private var showChatSheet: Bool = false
-    
+
     let columns = Array(repeating: GridItem(.flexible()), count: 7)
     
     var currentArtistName: String {
@@ -334,27 +334,64 @@ struct ChatBotView: View {
     func handleDifyResponse(jsonString: String) {
         DispatchQueue.main.async {
             self.isSearching = false
-            // JSONの前後にある不要な改行などを除去
-            let cleanJson = jsonString.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard let data = cleanJson.data(using: .utf8),
-                  let result = try? JSONDecoder().decode(AIResult.self, from: data) else {
-                self.messages.append(ChatMessage(text: jsonString, isUser: false))
-                return
-            }
             
-            if result.is_event, let dateString = result.date, let date = parseDate(dateString) {
-                let newEvent = Event(artistID: selectedArtistID ?? UUID(), date: date, title: result.title ?? "ライブ", details: result.details, locationName: result.location)
-                events.append(newEvent)
-                messages.append(ChatMessage(text: "「\(result.title ?? "イベント")」を追加したよ！", isUser: false))
-            } else {
-                messages.append(ChatMessage(text: result.details ?? "イベント情報は見つからなかったよ", isUser: false))
+            // 1. Markdown装飾を消す
+            let cleanJson = jsonString
+                .replacingOccurrences(of: "```json", with: "")
+                .replacingOccurrences(of: "```", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            guard let data = cleanJson.data(using: .utf8) else { return }
+            
+            // 2. まず配列として解析を試みる
+            if let results = try? JSONDecoder().decode([AIResult].self, from: data) {
+                self.processResults(results)
             }
+            // 配列で失敗したら、単体オブジェクトとして解析を試みる
+            else if let singleResult = try? JSONDecoder().decode(AIResult.self, from: data) {
+                self.processResults([singleResult])
+            }
+            else {
+                self.messages.append(ChatMessage(text: "AIからの回答: \(jsonString)", isUser: false))
+            }
+        }
+    }
+
+   
+    func processResults(_ results: [AIResult]) {
+        var count = 0
+        for result in results {
+            if result.is_event, let dateString = result.date, let date = parseDate(dateString) {
+                let newEvent = Event(artistID: selectedArtistID ?? UUID(),
+                                     date: date,
+                                     title: result.title ?? "ライブ",
+                                     details: result.details,
+                                     locationName: result.location)
+                events.append(newEvent)
+                count += 1
+            }
+        }
+        if count > 0 {
+            messages.append(ChatMessage(text: "\(count)件のライブをカレンダーに追加したよ！", isUser: false))
+        } else {
+            messages.append(ChatMessage(text: "予定が見つかったよ", isUser: false))
         }
     }
     
     func parseDate(_ dateString: String) -> Date? {
-        let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX")
-        for format in ["yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd"] {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0) // GMTで統一
+        
+        // 許容するフォーマットリスト
+        let formats = [
+            "yyyy-MM-dd",
+            "yyyy/MM/dd",
+            "yyyy-MM-dd'T'HH:mm:ss",
+            "yyyy-MM-dd HH:mm:ss"
+        ]
+        
+        for format in formats {
             formatter.dateFormat = format
             if let date = formatter.date(from: dateString) { return date }
         }
