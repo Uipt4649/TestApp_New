@@ -304,3 +304,33 @@ struct SelectView: View {
 #Preview {
     SelectView()
 }
+// MARK: - Placeholder LogEntry and LogView (to fix compilation error)
+struct LogEntry: Identifiable, Equatable {
+    let id = UUID()
+    var message: String
+    var date: Date = Date()
+}
+
+struct LogView: View {
+    @Binding var logs: [LogEntry]
+    var body: some View {
+        NavigationStack {
+            List(logs) { log in
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(log.message).font(.body)
+                    Text("\(log.date, formatter: dateFormatter)").font(.caption).foregroundColor(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+            .navigationTitle("ログ一覧")
+        }
+    }
+}
+
+private let dateFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateStyle = .medium
+    formatter.timeStyle = .short
+    return formatter
+}()
+
