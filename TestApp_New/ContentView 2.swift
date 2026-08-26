@@ -91,89 +91,69 @@ struct CardView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let frame = geometry.frame(in: .scrollView(axis: .horizontal))
-            let progress = min(max(frame.minX / max(frame.width, 1), -1), 1)
+            let width = geometry.size.width
+            let height = geometry.size.height
 
-            cardBody
-                .padding(.horizontal, AppStyle.cardInset)
-                .rotation3DEffect(
-                    .degrees(-progress * 86),
-                    axis: (x: 0, y: 1, z: 0),
-                    anchor: progress > 0 ? .leading : .trailing,
-                    perspective: 0.72
-                )
-                .scaleEffect(1 - abs(progress) * 0.035)
-                .opacity(1 - abs(progress) * 0.16)
-        }
-        .containerRelativeFrame(.horizontal)
-    }
-
-    private var cardBody: some View {
-        ZStack {
-            cardArtwork
-
-            LinearGradient(
-                colors: [.black.opacity(0.04), .clear, .black.opacity(0.54)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-
-            VStack(spacing: 0) {
-                HStack {
-                    Text("OSHI PROFILE")
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                        .tracking(1.5)
-                        .foregroundStyle(.white.opacity(0.84))
-
-                    Spacer()
-
-                    actionButton(systemName: "pencil", action: onEdit)
-                    actionButton(systemName: "trash", action: { showDeleteAlert = true })
-                }
-                .padding(16)
-
-                Spacer()
-
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack(alignment: .bottom) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(card.artistName)
-                                .font(.system(size: 30, weight: .semibold, design: .rounded))
-                                .lineLimit(1)
-
-                            Text(card.description?.isEmpty == false ? card.description! : "AIが最新情報と予定を整理します")
-                                .font(.subheadline)
-                                .foregroundStyle(.primary.opacity(0.62))
-                                .lineLimit(2)
-                        }
-
-                        Spacer(minLength: 12)
-
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundStyle(.primary.opacity(0.72))
-                    }
-
-                    Button(action: onOpenCalendar) {
-                        HStack {
-                            Label("予定を見る", systemImage: "calendar")
-                            Spacer()
-                            Image(systemName: "arrow.up.right")
-                        }
-                        .font(.system(size: 15, weight: .semibold))
-                        .padding(.horizontal, 16)
-                        .frame(height: 48)
-                        .foregroundStyle(.white)
-                        .background(AppStyle.ink.opacity(0.88))
-                        .overlay(Rectangle().stroke(.white.opacity(0.20), lineWidth: 0.5))
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(18)
-                .glassSurface(tint: card.backgroundColor, opacity: 0.09)
-                .padding(12)
+            if width.isFinite, height.isFinite, width > 1, height > 1 {
+                let photoHeight = min(max(height * 0.52, 220), max(height - 210, 220))
+                cardBody(width: width, height: height, photoHeight: photoHeight)
+            } else {
+                Color.clear
             }
         }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+    }
+
+    private func cardBody(width: CGFloat, height: CGFloat, photoHeight: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            ZStack(alignment: .topTrailing) {
+                photoArea(width: width, height: photoHeight)
+
+                HStack(spacing: 8) {
+                    actionButton(systemName: "pencil", label: "編集", action: onEdit)
+                    actionButton(systemName: "trash", label: "削除", action: { showDeleteAlert = true })
+                }
+                .padding(14)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text(card.artistName)
+                    .font(.system(size: 28, weight: .semibold, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+
+                if let description = card.description, !description.isEmpty {
+                    Text(description)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+
+                Spacer(minLength: 12)
+
+                Button(action: onOpenCalendar) {
+                    HStack {
+                        Label("予定を見る", systemImage: "calendar")
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                    }
+                    .font(.system(size: 15, weight: .semibold))
+                    .padding(.horizontal, 16)
+                    .frame(height: 48)
+                    .foregroundStyle(.white)
+                    .background(AppStyle.ink.opacity(0.90))
+                    .overlay(Rectangle().stroke(.white.opacity(0.20), lineWidth: 0.5))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(.ultraThinMaterial)
+            .background(card.backgroundColor.opacity(0.10))
+        }
+        .frame(width: width, height: height)
+        .background(Color.white.opacity(0.24))
         .clipShape(Rectangle())
         .overlay {
             Rectangle()
@@ -186,8 +166,6 @@ struct CardView: View {
                     lineWidth: 1
                 )
         }
-        .shadow(color: card.backgroundColor.opacity(0.18), radius: 28, y: 18)
-        .shadow(color: .black.opacity(0.12), radius: 18, y: 10)
         .alert("この推しカードを削除しますか？", isPresented: $showDeleteAlert) {
             Button("削除", role: .destructive, action: onDelete)
             Button("キャンセル", role: .cancel) {}
@@ -195,11 +173,22 @@ struct CardView: View {
     }
 
     @ViewBuilder
-    private var cardArtwork: some View {
+    private func photoArea(width: CGFloat, height: CGFloat) -> some View {
         if let image = card.image {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
+            ZStack {
+                LinearGradient(
+                    colors: [card.backgroundColor.opacity(0.25), .white.opacity(0.42)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: width, height: height)
+            }
+            .frame(width: width, height: height)
+            .clipped()
         } else {
             ZStack {
                 LinearGradient(
@@ -215,21 +204,29 @@ struct CardView: View {
                     .offset(x: 110, y: -150)
 
                 Text(String(card.artistName.prefix(1)).uppercased())
-                    .font(.system(size: 190, weight: .thin, design: .rounded))
+                    .font(.system(size: min(width, height) * 0.48, weight: .thin, design: .rounded))
                     .foregroundStyle(.white.opacity(0.34))
             }
+            .frame(width: width, height: height)
+            .clipped()
         }
     }
 
-    private func actionButton(systemName: String, action: @escaping () -> Void) -> some View {
+    private func actionButton(systemName: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 14, weight: .semibold))
-                .frame(width: 38, height: 38)
+                .frame(width: 42, height: 42)
                 .foregroundStyle(.white)
-                .glassSurface(opacity: 0.06, isInteractive: true)
+                .background(AppStyle.ink.opacity(0.66))
+                .glassEffect(
+                    .regular.tint(AppStyle.ink.opacity(0.28)),
+                    in: Rectangle()
+                )
+                .overlay(Rectangle().stroke(.white.opacity(0.42), lineWidth: 0.7))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 }
 
@@ -261,10 +258,10 @@ struct AddCardView: View {
                     .stroke(style: StrokeStyle(lineWidth: 0.8, dash: [7, 7]))
                     .foregroundStyle(.primary.opacity(0.18))
             }
-            .padding(.horizontal, AppStyle.cardInset)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
         }
         .buttonStyle(.plain)
-        .containerRelativeFrame(.horizontal)
     }
 }
 
@@ -386,73 +383,234 @@ struct AddCardSheet: View {
     }
 }
 
-struct ContentView: View {
+private struct OshiIconCloud: View {
+    let cards: [Card]
+    let onSelect: (Card) -> Void
+
+    @State private var settledOffset: CGSize = .zero
+    @State private var isFloating = false
+    @GestureState private var dragOffset: CGSize = .zero
+
+    private let positions: [CGPoint] = [
+        .init(x: 0, y: 0),
+        .init(x: -1, y: 0), .init(x: 1, y: 0),
+        .init(x: -0.5, y: -0.88), .init(x: 0.5, y: -0.88),
+        .init(x: -0.5, y: 0.88), .init(x: 0.5, y: 0.88),
+        .init(x: -2, y: 0), .init(x: 2, y: 0),
+        .init(x: -1.5, y: -0.88), .init(x: 1.5, y: -0.88),
+        .init(x: -1, y: -1.76), .init(x: 0, y: -1.76), .init(x: 1, y: -1.76),
+        .init(x: -1.5, y: 0.88), .init(x: 1.5, y: 0.88),
+        .init(x: -1, y: 1.76), .init(x: 0, y: 1.76), .init(x: 1, y: 1.76)
+    ]
+
+    var body: some View {
+        GeometryReader { geometry in
+            let unit = min(geometry.size.width, geometry.size.height) / 5.15
+            let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
+
+            ZStack {
+                ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
+                    let point = positions[index % positions.count]
+                    let size = iconSize(for: index, unit: unit)
+
+                    Button {
+                        onSelect(card)
+                    } label: {
+                        icon(for: card, size: size)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(card.artistName)
+                    .position(
+                        x: center.x + point.x * unit,
+                        y: center.y + point.y * unit
+                    )
+                    .offset(
+                        x: isFloating ? CGFloat((index % 3) - 1) * 2.5 : CGFloat(1 - (index % 3)) * 2.5,
+                        y: isFloating ? CGFloat(index.isMultiple(of: 2) ? -5 : 4) : CGFloat(index.isMultiple(of: 2) ? 4 : -5)
+                    )
+                    .animation(
+                        .easeInOut(duration: 2.8 + Double(index % 4) * 0.35)
+                            .repeatForever(autoreverses: true)
+                            .delay(Double(index) * 0.06),
+                        value: isFloating
+                    )
+                }
+            }
+            .offset(
+                x: settledOffset.width + dragOffset.width,
+                y: settledOffset.height + dragOffset.height
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 8)
+                    .updating($dragOffset) { value, state, _ in
+                        state = value.translation
+                    }
+                    .onEnded { value in
+                        let horizontalLimit = geometry.size.width * 0.22
+                        let verticalLimit = geometry.size.height * 0.16
+                        settledOffset = CGSize(
+                            width: min(max(settledOffset.width + value.translation.width, -horizontalLimit), horizontalLimit),
+                            height: min(max(settledOffset.height + value.translation.height, -verticalLimit), verticalLimit)
+                        )
+                    }
+            )
+        }
+        .clipped()
+        .onAppear { isFloating = true }
+    }
+
+    private func iconSize(for index: Int, unit: CGFloat) -> CGFloat {
+        if index == 0 { return unit * 1.28 }
+        if index < 7 { return unit * 1.10 }
+        return unit * 0.94
+    }
+
+    private func icon(for card: Card, size: CGFloat) -> some View {
+        ZStack {
+            Circle()
+                .fill(card.backgroundColor.opacity(0.30))
+
+            if let image = card.image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size - 8, height: size - 8)
+                    .clipShape(Circle())
+            } else {
+                Text(String(card.artistName.prefix(1)).uppercased())
+                    .font(.system(size: size * 0.38, weight: .medium, design: .rounded))
+                    .foregroundStyle(AppStyle.ink.opacity(0.72))
+            }
+        }
+        .frame(width: size, height: size)
+        .glassEffect(.regular.tint(card.backgroundColor.opacity(0.15)).interactive(), in: Circle())
+        .overlay(Circle().stroke(.white.opacity(0.68), lineWidth: 1))
+        .shadow(color: card.backgroundColor.opacity(0.18), radius: 14, y: 8)
+    }
+}
+
+private struct OshiCardDetailSheet: View {
+    @Environment(\.dismiss) private var dismiss
     @Binding var cards: [Card]
     @Binding var selectedArtistID: UUID?
     @Binding var selectedTab: Int
 
-    @State private var showAddSheet = false
-    @State private var editingCard: Card?
-    @State private var visiblePageID: UUID?
+    let cardID: UUID
+    @State private var showEditSheet = false
 
-    private let addCardID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    private var card: Card? {
+        cards.first(where: { $0.id == cardID })
+    }
 
     var body: some View {
         NavigationStack {
             ZStack {
                 AppBackground()
 
-                VStack(spacing: 14) {
+                if let card {
+                    CardView(
+                        card: card,
+                        onDelete: {
+                            cards.removeAll { $0.id == cardID }
+                            dismiss()
+                        },
+                        onEdit: { showEditSheet = true },
+                        onOpenCalendar: {
+                            selectedArtistID = cardID
+                            selectedTab = 1
+                            dismiss()
+                        }
+                    )
+                }
+            }
+            .navigationTitle(card?.artistName ?? "")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("閉じる") { dismiss() }
+                }
+            }
+            .sheet(isPresented: $showEditSheet) {
+                if let card {
+                    AddCardSheet(
+                        onSave: { updatedCard in
+                            if let index = cards.firstIndex(where: { $0.id == cardID }) {
+                                cards[index] = updatedCard
+                            }
+                        },
+                        editingCard: card
+                    )
+                    .presentationDetents([.large])
+                }
+            }
+        }
+    }
+}
+
+struct ContentView: View {
+    @Binding var cards: [Card]
+    @Binding var selectedArtistID: UUID?
+    @Binding var selectedTab: Int
+
+    @State private var showAddSheet = false
+    @State private var selectedCardID: UUID?
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AppBackground()
+
+                VStack(spacing: 0) {
                     header
 
-                    ScrollView(.horizontal) {
-                        LazyHStack(spacing: 0) {
-                            ForEach(cards) { card in
-                                CardView(
-                                    card: card,
-                                    onDelete: { delete(card) },
-                                    onEdit: { edit(card) },
-                                    onOpenCalendar: { openCalendar(for: card) }
-                                )
-                                .id(card.id)
-                            }
-
-                            AddCardView(action: addCard)
-                                .id(addCardID)
+                    if cards.isEmpty {
+                        AddCardView(action: addCard)
+                    } else {
+                        OshiIconCloud(cards: cards) { card in
+                            selectedCardID = card.id
                         }
-                        .scrollTargetLayout()
                     }
-                    .scrollIndicators(.hidden)
-                    .scrollTargetBehavior(.paging)
-                    .scrollPosition(id: $visiblePageID)
-
-                    pageIndicator
                 }
                 .padding(.bottom, 12)
             }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showAddSheet) {
-                AddCardSheet(
-                    onSave: save,
-                    editingCard: editingCard
-                )
+                AddCardSheet(onSave: save)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: detailSheetPresented) {
+                if let selectedCardID {
+                    OshiCardDetailSheet(
+                        cards: $cards,
+                        selectedArtistID: $selectedArtistID,
+                        selectedTab: $selectedTab,
+                        cardID: selectedCardID
+                    )
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+                }
             }
         }
     }
 
-    private var header: some View {
-        HStack(alignment: .bottom) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("MY OSHI")
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .tracking(2.2)
-                    .foregroundStyle(.secondary)
-                Text("推しのすべてを、ひとつに。")
-                    .font(.system(size: 24, weight: .semibold, design: .rounded))
-                    .foregroundStyle(AppStyle.ink)
+    private var detailSheetPresented: Binding<Bool> {
+        Binding(
+            get: { selectedCardID != nil },
+            set: { isPresented in
+                if !isPresented { selectedCardID = nil }
             }
+        )
+    }
+
+    private var header: some View {
+        HStack {
+            Text("MY OSHI")
+                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                .tracking(2.2)
+                .foregroundStyle(AppStyle.ink)
 
             Spacer()
 
@@ -466,36 +624,10 @@ struct ContentView: View {
             .buttonStyle(.plain)
         }
         .padding(.horizontal, AppStyle.pagePadding)
-        .padding(.top, 10)
-    }
-
-    private var pageIndicator: some View {
-        HStack(spacing: 6) {
-            ForEach(cards) { card in
-                Capsule()
-                    .fill(visiblePageID == card.id ? AppStyle.ink : AppStyle.ink.opacity(0.18))
-                    .frame(width: visiblePageID == card.id ? 22 : 6, height: 4)
-                    .animation(.easeOut(duration: 0.22), value: visiblePageID)
-            }
-            Circle()
-                .stroke(AppStyle.ink.opacity(0.32), lineWidth: 1)
-                .frame(width: 5, height: 5)
-        }
-        .frame(height: 8)
-        .onAppear {
-            if visiblePageID == nil {
-                visiblePageID = cards.first?.id ?? addCardID
-            }
-        }
+        .padding(.vertical, 6)
     }
 
     private func addCard() {
-        editingCard = nil
-        showAddSheet = true
-    }
-
-    private func edit(_ card: Card) {
-        editingCard = card
         showAddSheet = true
     }
 
@@ -504,21 +636,6 @@ struct ContentView: View {
             cards[index] = card
         } else {
             cards.append(card)
-            visiblePageID = card.id
-        }
-    }
-
-    private func delete(_ card: Card) {
-        cards.removeAll { $0.id == card.id }
-        if visiblePageID == card.id {
-            visiblePageID = cards.first?.id ?? addCardID
-        }
-    }
-
-    private func openCalendar(for card: Card) {
-        selectedArtistID = card.id
-        withAnimation(.easeInOut(duration: 0.24)) {
-            selectedTab = 1
         }
     }
 }
