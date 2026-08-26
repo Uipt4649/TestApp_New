@@ -47,109 +47,138 @@ struct CalendarView: View {
     
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                
-                //カレンダーヘッダー
-                VStack(spacing: 16) {
-                    HStack {
-                        Button("<") { previousMonth() }
-                        Spacer()
-                        Text(monthYearString(currentMonth)).font(.title2).bold()
-                        Spacer()
-                        Button(">") { nextMonth() }
-                    }
-                    .padding(.horizontal)
-                    
-                    let weekdaySymbols = Calendar.current.shortWeekdaySymbols
-                    HStack {
-                        ForEach(weekdaySymbols, id: \.self) { day in
-                            Text(day).frame(maxWidth: .infinity).font(.caption).foregroundColor(.secondary)
+            ZStack {
+                AppBackground()
+
+                VStack(spacing: 14) {
+                    VStack(spacing: 16) {
+                        HStack {
+                            monthButton(systemName: "chevron.left", action: previousMonth)
+                            Spacer()
+                            VStack(spacing: 3) {
+                                Text("CALENDAR")
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                    .tracking(1.8)
+                                    .foregroundStyle(.secondary)
+                                Text(monthYearString(currentMonth))
+                                    .font(.system(size: 22, weight: .semibold, design: .rounded))
+                            }
+                            Spacer()
+                            monthButton(systemName: "chevron.right", action: nextMonth)
                         }
-                    }
-                    
-                    LazyVGrid(columns: columns, spacing: 10) {
-                        ForEach(daysInMonth(currentMonth), id: \.self) { date in
-                            Button {
-                                selectedDate = date
-                            } label: {
-                                VStack(spacing: 4) {
-                                    Text("\(Calendar.current.component(.day, from: date))")
-                                        .frame(maxWidth: .infinity)
-                                        .padding(8)
-                                        .background(isSelected(date) ? Color.blue.opacity(0.3) : Color.clear)
-                                        .cornerRadius(8)
-                                    
-                                    if !eventsForDate(date).isEmpty {
-                                        Circle().fill(Color.red).frame(width: 6, height: 6)
-                                    } else {
-                                        Spacer().frame(height: 6)
+
+                        let weekdaySymbols = Calendar.current.shortWeekdaySymbols
+                        HStack {
+                            ForEach(weekdaySymbols, id: \.self) { day in
+                                Text(day.uppercased())
+                                    .frame(maxWidth: .infinity)
+                                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        LazyVGrid(columns: columns, spacing: 8) {
+                            ForEach(daysInMonth(currentMonth), id: \.self) { date in
+                                Button {
+                                    withAnimation(.easeOut(duration: 0.18)) {
+                                        selectedDate = date
+                                    }
+                                } label: {
+                                    VStack(spacing: 4) {
+                                        Text("\(Calendar.current.component(.day, from: date))")
+                                            .font(.system(size: 14, weight: isSelected(date) ? .bold : .regular))
+                                            .frame(width: 34, height: 32)
+                                            .foregroundStyle(isSelected(date) ? .white : .primary)
+                                            .background(isSelected(date) ? AppStyle.ink : .clear)
+
+                                        Circle()
+                                            .fill(eventsForDate(date).isEmpty ? .clear : Color.cyan)
+                                            .frame(width: 4, height: 4)
                                     }
                                 }
+                                .buttonStyle(.plain)
                             }
-                            .foregroundColor(.primary)
                         }
                     }
-                }
-                .padding()
-                
-                Divider()
-                
-                // --- 予定リスト ---
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack {
-                        if let selectedDate = selectedDate {
-                            Text("\(monthDayString(selectedDate)) の予定")
-                                .font(.headline)
+                    .padding(18)
+                    .background(.ultraThinMaterial)
+                    .overlay(Rectangle().stroke(.white.opacity(0.56), lineWidth: 0.8))
+                    .padding(.horizontal, 16)
+
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack {
+                            if let selectedDate {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(monthDayString(selectedDate))
+                                        .font(.system(size: 20, weight: .semibold, design: .rounded))
+                                    Text("\(currentArtistName) の予定")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                            Button {
+                                editingEvent = nil
+                                showAddEventSheet = true
+                            } label: {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .frame(width: 40, height: 40)
+                                    .foregroundStyle(.white)
+                                    .background(AppStyle.ink)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        Spacer()
-                        Button {
-                            editingEvent = nil
-                            showAddEventSheet = true
-                        } label: {
-                            Image(systemName: "plus.circle.fill").font(.title3)
-                        }
-                    }
-                    .padding()
-                    .background(Color(.secondarySystemBackground))
-                    
-                    if let selectedDate = selectedDate {
-                        let dayEvents = eventsForDate(selectedDate)
-                        
-                        if dayEvents.isEmpty {
-                            ContentUnavailableView("予定なし", systemImage: "calendar.badge.plus", description: Text("\(currentArtistName) の予定を＋から追加できます"))
-                                .frame(maxHeight: .infinity)
-                        } else {
-                            List {
-                                ForEach(dayEvents) { event in
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(event.title).font(.body).bold()
-                                        
-                                        if let location = event.locationName, !location.isEmpty {
-                                            Button {
-                                                openMap(locationName: location)
-                                            } label: {
-                                                Label(location, systemImage: "mappin.and.ellipse")
-                                                    .font(.caption)
-                                                    .foregroundColor(.blue)
+                        .padding(16)
+
+                        if let selectedDate {
+                            let dayEvents = eventsForDate(selectedDate)
+                            if dayEvents.isEmpty {
+                                ContentUnavailableView(
+                                    "予定はありません",
+                                    systemImage: "calendar.badge.plus",
+                                    description: Text("＋から追加するか、AIに探してもらえます")
+                                )
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            } else {
+                                List {
+                                    ForEach(dayEvents) { event in
+                                        VStack(alignment: .leading, spacing: 7) {
+                                            Text(event.title)
+                                                .font(.body.weight(.semibold))
+                                            if let location = event.locationName, !location.isEmpty {
+                                                Button {
+                                                    openMap(locationName: location)
+                                                } label: {
+                                                    Label(location, systemImage: "mappin.and.ellipse")
+                                                        .font(.caption)
+                                                }
+                                                .buttonStyle(.plain)
                                             }
-                                            .buttonStyle(.plain)
+                                        }
+                                        .padding(.vertical, 5)
+                                        .contentShape(Rectangle())
+                                        .listRowBackground(Color.white.opacity(0.18))
+                                        .onTapGesture {
+                                            editingEvent = event
+                                            showAddEventSheet = true
                                         }
                                     }
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        editingEvent = event
-                                        showAddEventSheet = true
+                                    .onDelete { indexSet in
+                                        deleteEvent(at: indexSet, in: dayEvents)
                                     }
                                 }
-                                .onDelete { indexSet in
-                                    deleteEvent(at: indexSet, in: dayEvents)
-                                }
+                                .listStyle(.plain)
+                                .scrollContentBackground(.hidden)
                             }
-                            .listStyle(.plain)
                         }
                     }
+                    .frame(maxHeight: .infinity)
+                    .background(.ultraThinMaterial)
+                    .overlay(Rectangle().stroke(.white.opacity(0.44), lineWidth: 0.7))
+                    .padding(.horizontal, 16)
                 }
-                .background(Color(.secondarySystemBackground))
+                .padding(.bottom, 10)
             }
             .navigationTitle(currentArtistName)
             .navigationBarTitleDisplayMode(.inline)
@@ -175,14 +204,11 @@ struct CalendarView: View {
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button { showChatSheet = true } label: {
-                        ZStack {
-                            Circle()
-                                .fill(Color.blue.gradient)
-                                .frame(width: 36, height: 36)
-                            Image(systemName: "brain.head.profile")
-                                .font(.system(size: 18))
-                                .foregroundColor(.white)
-                        }
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 15, weight: .semibold))
+                            .frame(width: 36, height: 36)
+                            .foregroundStyle(.white)
+                            .background(AppStyle.ink)
                     }
                 }
             }
@@ -202,6 +228,17 @@ struct CalendarView: View {
                 }
             }
         }
+    }
+
+    private func monthButton(systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 13, weight: .semibold))
+                .frame(width: 36, height: 36)
+                .background(.white.opacity(0.28))
+                .overlay(Rectangle().stroke(.white.opacity(0.48), lineWidth: 0.7))
+        }
+        .buttonStyle(.plain)
     }
     
     // --- 内部ヘルパー関数 ---
@@ -749,6 +786,8 @@ struct CalendarPreviewContainer: View {
     }
 }
 
+#if DEBUG
 #Preview {
     CalendarPreviewContainer()
 }
+#endif

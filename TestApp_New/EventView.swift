@@ -14,53 +14,55 @@ struct EventView: View {
     
     var body: some View {
         NavigationStack {
-            List {
+            ZStack {
+                AppBackground()
+
                 if events.isEmpty {
                     ContentUnavailableView(
                         "予定がありません",
-                        systemImage: "calendar.badge.exclamationmark",
-                        description: Text("")
+                        systemImage: "sparkles",
+                        description: Text("AIが見つけた予定はここにまとまります")
                     )
                 } else {
-                    ForEach(sortedEvents) { event in
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                //どのアーティストの予定かを表示
-                                let artistName = cards.first(where: { $0.id == event.artistID })?.artistName ?? "不明"
-                                let artistColor = cards.first(where: { $0.id == event.artistID })?.backgroundColor ?? .gray
-                                
-                                Text(artistName)
-                                    .font(.caption2)
-                                    .bold()
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 2)
-                                    .background(artistColor.opacity(0.2))
-                                    .foregroundColor(artistColor)
-                                    .cornerRadius(4)
-                                
-                                Spacer()
-                                
-                                Text(smartDateLabel(for: event.date))
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                    List {
+                        ForEach(sortedEvents) { event in
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack {
+                                    let artistName = cards.first(where: { $0.id == event.artistID })?.artistName ?? "不明"
+                                    let artistColor = cards.first(where: { $0.id == event.artistID })?.backgroundColor ?? .gray
+
+                                    Text(artistName.uppercased())
+                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                        .tracking(1)
+                                        .foregroundStyle(artistColor)
+
+                                    Spacer()
+
+                                    Text(smartDateLabel(for: event.date))
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Text(event.title)
+                                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+
+                                if let details = event.details, !details.isEmpty {
+                                    Text(details)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(2)
+                                }
                             }
-                            
-                            Text(event.title)
-                                .font(.headline)
-                            
-                            if let details = event.details, !details.isEmpty {
-                                Text(details)
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
-                                    .lineLimit(2) // 長い場合は省略
-                            }
+                            .padding(.vertical, 10)
+                            .listRowBackground(Color.white.opacity(0.24))
+                            .listRowSeparatorTint(.white.opacity(0.52))
                         }
-                        .padding(.vertical, 4)
+                        .onDelete(perform: deleteEvent)
                     }
-                    .onDelete(perform: deleteEvent)
+                    .scrollContentBackground(.hidden)
                 }
             }
-            .navigationTitle("イベント一覧")
+            .navigationTitle("すべての予定")
         }
     }
     
@@ -92,4 +94,3 @@ struct EventView: View {
 //#Preview {
 //    EventView(events: .constant([]))
 //}
-
