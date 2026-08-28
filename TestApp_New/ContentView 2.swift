@@ -387,47 +387,66 @@ private struct OshiIconCloud: View {
     let cards: [Card]
     let onSelect: (Card) -> Void
 
-    @State private var settledOffset: CGSize = .zero
     @State private var isFloating = false
-    @GestureState private var dragOffset: CGSize = .zero
-
-    private let positions: [CGPoint] = [
-        .init(x: 0, y: 0),
-        .init(x: -1, y: 0), .init(x: 1, y: 0),
-        .init(x: -0.5, y: -0.88), .init(x: 0.5, y: -0.88),
-        .init(x: -0.5, y: 0.88), .init(x: 0.5, y: 0.88),
-        .init(x: -2, y: 0), .init(x: 2, y: 0),
-        .init(x: -1.5, y: -0.88), .init(x: 1.5, y: -0.88),
-        .init(x: -1, y: -1.76), .init(x: 0, y: -1.76), .init(x: 1, y: -1.76),
-        .init(x: -1.5, y: 0.88), .init(x: 1.5, y: 0.88),
-        .init(x: -1, y: 1.76), .init(x: 0, y: 1.76), .init(x: 1, y: 1.76)
-    ]
+    @State private var iconOffsets: [UUID: CGSize] = [:]
+    @State private var draggingCardID: UUID?
+    @State private var dragOrigin: CGSize = .zero
 
     var body: some View {
         GeometryReader { geometry in
-            let unit = min(geometry.size.width, geometry.size.height) / 5.15
+            let positions = hexagonalPositions(count: cards.count)
+            let unit = layoutUnit(for: positions, in: geometry.size)
             let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
 
             ZStack {
                 ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
-                    let point = positions[index % positions.count]
+                    let point = positions[index]
                     let size = iconSize(for: index, unit: unit)
-
-                    Button {
-                        onSelect(card)
-                    } label: {
-                        icon(for: card, size: size)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(card.artistName)
-                    .position(
+                    let basePosition = CGPoint(
                         x: center.x + point.x * unit,
                         y: center.y + point.y * unit
                     )
-                    .offset(
-                        x: isFloating ? CGFloat((index % 3) - 1) * 2.5 : CGFloat(1 - (index % 3)) * 2.5,
-                        y: isFloating ? CGFloat(index.isMultiple(of: 2) ? -5 : 4) : CGFloat(index.isMultiple(of: 2) ? 4 : -5)
+                    let floatingOffset = CGSize(
+                        width: isFloating
+                            ? CGFloat((index % 3) - 1) * 2.5
+                            : CGFloat(1 - (index % 3)) * 2.5,
+                        height: isFloating
+                            ? CGFloat(index.isMultiple(of: 2) ? -5 : 4)
+                            : CGFloat(index.isMultiple(of: 2) ? 4 : -5)
                     )
+
+                    icon(for: card, size: size)
+                    .contentShape(Circle())
+                    .onTapGesture { onSelect(card) }
+                    .gesture(
+                        DragGesture(minimumDistance: 6)
+                            .onChanged { value in
+                                if draggingCardID != card.id {
+                                    draggingCardID = card.id
+                                    dragOrigin = iconOffsets[card.id] ?? .zero
+                                }
+                                iconOffsets[card.id] = clampedOffset(
+                                    CGSize(
+                                        width: dragOrigin.width + value.translation.width,
+                                        height: dragOrigin.height + value.translation.height
+                                    ),
+                                    from: basePosition,
+                                    iconSize: size,
+                                    canvasSize: geometry.size
+                                )
+                            }
+                            .onEnded { _ in
+                                draggingCardID = nil
+                            }
+                    )
+                    .accessibilityLabel(card.artistName)
+                    .accessibilityAddTraits(.isButton)
+                    .position(basePosition)
+                    .offset(
+                        x: (iconOffsets[card.id]?.width ?? 0) + floatingOffset.width,
+                        y: (iconOffsets[card.id]?.height ?? 0) + floatingOffset.height
+                    )
+                    .zIndex(draggingCardID == card.id ? 1_000 : Double(cards.count - index))
                     .animation(
                         .easeInOut(duration: 2.8 + Double(index % 4) * 0.35)
                             .repeatForever(autoreverses: true)
@@ -436,35 +455,66 @@ private struct OshiIconCloud: View {
                     )
                 }
             }
-            .offset(
-                x: settledOffset.width + dragOffset.width,
-                y: settledOffset.height + dragOffset.height
-            )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 8)
-                    .updating($dragOffset) { value, state, _ in
-                        state = value.translation
-                    }
-                    .onEnded { value in
-                        let horizontalLimit = geometry.size.width * 0.22
-                        let verticalLimit = geometry.size.height * 0.16
-                        settledOffset = CGSize(
-                            width: min(max(settledOffset.width + value.translation.width, -horizontalLimit), horizontalLimit),
-                            height: min(max(settledOffset.height + value.translation.height, -verticalLimit), verticalLimit)
-                        )
-                    }
-            )
         }
         .clipped()
         .onAppear { isFloating = true }
     }
 
     private func iconSize(for index: Int, unit: CGFloat) -> CGFloat {
-        if index == 0 { return unit * 1.28 }
-        if index < 7 { return unit * 1.10 }
-        return unit * 0.94
+        if index == 0 { return unit * 1.02 }
+        if index < 7 { return unit * 0.94 }
+        return unit * 0.86
+    }
+
+    private func hexagonalPositions(count: Int) -> [CGPoint] {
+        guard count > 0 else { return [] }
+        var points = [CGPoint.zero]
+        let directions = [
+            (q: -1, r: 1), (q: -1, r: 0), (q: 0, r: -1),
+            (q: 1, r: -1), (q: 1, r: 0), (q: 0, r: 1)
+        ]
+        var ring = 1
+
+        while points.count < count {
+            var q = ring
+            var r = 0
+            for direction in directions {
+                for _ in 0..<ring where points.count < count {
+                    points.append(
+                        CGPoint(
+                            x: CGFloat(q) + CGFloat(r) * 0.5,
+                            y: CGFloat(r) * 0.866
+                        )
+                    )
+                    q += direction.q
+                    r += direction.r
+                }
+            }
+            ring += 1
+        }
+        return points
+    }
+
+    private func layoutUnit(for positions: [CGPoint], in size: CGSize) -> CGFloat {
+        let maxX = positions.map { abs($0.x) }.max() ?? 0
+        let maxY = positions.map { abs($0.y) }.max() ?? 0
+        let horizontalUnit = (size.width - 24) / max(2 * maxX + 1.12, 1)
+        let verticalUnit = (size.height - 24) / max(2 * maxY + 1.12, 1)
+        return min(horizontalUnit, verticalUnit, 92)
+    }
+
+    private func clampedOffset(
+        _ offset: CGSize,
+        from basePosition: CGPoint,
+        iconSize: CGFloat,
+        canvasSize: CGSize
+    ) -> CGSize {
+        let margin = iconSize / 2 + 6
+        let x = min(max(basePosition.x + offset.width, margin), canvasSize.width - margin)
+        let y = min(max(basePosition.y + offset.height, margin), canvasSize.height - margin)
+        return CGSize(width: x - basePosition.x, height: y - basePosition.y)
     }
 
     private func icon(for card: Card, size: CGFloat) -> some View {
