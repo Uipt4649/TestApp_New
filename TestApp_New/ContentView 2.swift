@@ -437,78 +437,80 @@ private struct OshiIconCloud: View {
             let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
 
             ZStack {
-                ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
-                    let point = positions[index]
-                    let size = iconSize(for: card, unit: unit)
-                    let basePosition = CGPoint(
-                        x: center.x + point.x * unit,
-                        y: center.y + point.y * unit
-                    )
-                    let floatingOffset = CGSize(
-                        width: isFloating
-                            ? CGFloat((index % 3) - 1) * 2.5
-                            : CGFloat(1 - (index % 3)) * 2.5,
-                        height: isFloating
-                            ? CGFloat(index.isMultiple(of: 2) ? -5 : 4)
-                            : CGFloat(index.isMultiple(of: 2) ? 4 : -5)
-                    )
+                ZStack {
+                    ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
+                        let point = positions[index]
+                        let size = iconSize(for: card, unit: unit)
+                        let basePosition = CGPoint(
+                            x: center.x + point.x * unit,
+                            y: center.y + point.y * unit
+                        )
+                        let floatingOffset = CGSize(
+                            width: isFloating
+                                ? CGFloat((index % 3) - 1) * 2.5
+                                : CGFloat(1 - (index % 3)) * 2.5,
+                            height: isFloating
+                                ? CGFloat(index.isMultiple(of: 2) ? -5 : 4)
+                                : CGFloat(index.isMultiple(of: 2) ? 4 : -5)
+                        )
 
-                    icon(for: card, size: size)
-                    .contentShape(Circle())
-                    .gesture(
-                        DragGesture(minimumDistance: 0)
-                            .onChanged { value in
-                                let distance = hypot(
-                                    value.translation.width,
-                                    value.translation.height
-                                )
-                                guard distance > 6 else { return }
+                        icon(for: card, size: size)
+                            .contentShape(Circle())
+                            .gesture(
+                                DragGesture(minimumDistance: 0)
+                                    .onChanged { value in
+                                        let distance = hypot(
+                                            value.translation.width,
+                                            value.translation.height
+                                        )
+                                        guard distance > 6 else { return }
 
-                                if draggingCardID != card.id {
-                                    draggingCardID = card.id
-                                    dragOrigin = iconOffsets[card.id] ?? .zero
-                                }
-                                iconOffsets[card.id] = clampedOffset(
-                                    CGSize(
-                                        width: dragOrigin.width + value.translation.width,
-                                        height: dragOrigin.height + value.translation.height
-                                    ),
-                                    from: basePosition,
-                                    iconSize: size,
-                                    canvasSize: geometry.size
-                                )
-                            }
-                            .onEnded { value in
-                                let distance = hypot(
-                                    value.translation.width,
-                                    value.translation.height
-                                )
-                                if distance <= 6 {
-                                    onSelect(card)
-                                }
-                                draggingCardID = nil
-                            }
-                    )
-                    .accessibilityLabel(card.artistName)
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityAction { onSelect(card) }
-                    .position(basePosition)
-                    .offset(
-                        x: (iconOffsets[card.id]?.width ?? 0) + floatingOffset.width,
-                        y: (iconOffsets[card.id]?.height ?? 0) + floatingOffset.height
-                    )
-                    .zIndex(draggingCardID == card.id ? 1_000 : Double(cards.count - index))
-                    .animation(
-                        .easeInOut(duration: 2.8 + Double(index % 4) * 0.35)
-                            .repeatForever(autoreverses: true)
-                            .delay(Double(index) * 0.06),
-                        value: isFloating
-                    )
+                                        if draggingCardID != card.id {
+                                            draggingCardID = card.id
+                                            dragOrigin = iconOffsets[card.id] ?? .zero
+                                        }
+                                        iconOffsets[card.id] = clampedOffset(
+                                            CGSize(
+                                                width: dragOrigin.width + value.translation.width,
+                                                height: dragOrigin.height + value.translation.height
+                                            ),
+                                            from: basePosition,
+                                            iconSize: size,
+                                            canvasSize: geometry.size
+                                        )
+                                    }
+                                    .onEnded { value in
+                                        let distance = hypot(
+                                            value.translation.width,
+                                            value.translation.height
+                                        )
+                                        if distance <= 6 {
+                                            onSelect(card)
+                                        }
+                                        draggingCardID = nil
+                                    }
+                            )
+                            .accessibilityLabel(card.artistName)
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityAction { onSelect(card) }
+                            .position(basePosition)
+                            .offset(
+                                x: (iconOffsets[card.id]?.width ?? 0) + floatingOffset.width,
+                                y: (iconOffsets[card.id]?.height ?? 0) + floatingOffset.height
+                            )
+                            .zIndex(draggingCardID == card.id ? 1_000 : Double(cards.count - index))
+                            .animation(
+                                .easeInOut(duration: 2.8 + Double(index % 4) * 0.35)
+                                    .repeatForever(autoreverses: true)
+                                    .delay(Double(index) * 0.06),
+                                value: isFloating
+                            )
+                    }
                 }
+                .scaleEffect(zoomScale)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
-            .scaleEffect(zoomScale)
             .simultaneousGesture(
                 MagnificationGesture()
                     .onChanged { magnification in
@@ -520,8 +522,8 @@ private struct OshiIconCloud: View {
                         zoomStartScale = finalScale
                     }
             )
+            .clipped()
         }
-        .clipped()
         .onAppear { isFloating = true }
     }
 
