@@ -417,10 +417,15 @@ private struct OshiIconCloud: View {
 
                     icon(for: card, size: size)
                     .contentShape(Circle())
-                    .onTapGesture { onSelect(card) }
                     .gesture(
-                        DragGesture(minimumDistance: 6)
+                        DragGesture(minimumDistance: 0)
                             .onChanged { value in
+                                let distance = hypot(
+                                    value.translation.width,
+                                    value.translation.height
+                                )
+                                guard distance > 6 else { return }
+
                                 if draggingCardID != card.id {
                                     draggingCardID = card.id
                                     dragOrigin = iconOffsets[card.id] ?? .zero
@@ -435,12 +440,20 @@ private struct OshiIconCloud: View {
                                     canvasSize: geometry.size
                                 )
                             }
-                            .onEnded { _ in
+                            .onEnded { value in
+                                let distance = hypot(
+                                    value.translation.width,
+                                    value.translation.height
+                                )
+                                if distance <= 6 {
+                                    onSelect(card)
+                                }
                                 draggingCardID = nil
                             }
                     )
                     .accessibilityLabel(card.artistName)
                     .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { onSelect(card) }
                     .position(basePosition)
                     .offset(
                         x: (iconOffsets[card.id]?.width ?? 0) + floatingOffset.width,
