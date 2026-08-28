@@ -1,12 +1,37 @@
 import SwiftUI
 import PhotosUI
 
+enum OshiIconSize: String, CaseIterable, Identifiable {
+    case small
+    case medium
+    case large
+
+    var id: Self { self }
+
+    var label: String {
+        switch self {
+        case .small: "小"
+        case .medium: "中"
+        case .large: "大"
+        }
+    }
+
+    var scale: CGFloat {
+        switch self {
+        case .small: 0.78
+        case .medium: 0.94
+        case .large: 1.08
+        }
+    }
+}
+
 struct Card: Identifiable, Equatable {
     var id: UUID = UUID()
     var artistName: String
     var image: UIImage?
     var description: String?
     var backgroundColor: Color
+    var iconSize: OshiIconSize = .medium
 }
 
 enum AppStyle {
@@ -270,6 +295,7 @@ struct AddCardSheet: View {
     @State private var artistName = ""
     @State private var description = ""
     @State private var backgroundColor: Color = .cyan
+    @State private var iconSize: OshiIconSize = .medium
     @State private var selectedItem: PhotosPickerItem?
     @State private var image: UIImage?
 
@@ -295,6 +321,14 @@ struct AddCardSheet: View {
                         inputSection(title: "ACCENT") {
                             ColorPicker("カードの光の色", selection: $backgroundColor)
                         }
+                        inputSection(title: "ICON SIZE") {
+                            Picker("アイコンの大きさ", selection: $iconSize) {
+                                ForEach(OshiIconSize.allCases) { size in
+                                    Text(size.label).tag(size)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                        }
                     }
                     .padding(AppStyle.pagePadding)
                 }
@@ -313,7 +347,8 @@ struct AddCardSheet: View {
                                 artistName: artistName.trimmingCharacters(in: .whitespacesAndNewlines),
                                 image: image,
                                 description: description.isEmpty ? nil : description,
-                                backgroundColor: backgroundColor
+                                backgroundColor: backgroundColor,
+                                iconSize: iconSize
                             )
                         )
                         dismiss()
@@ -327,6 +362,7 @@ struct AddCardSheet: View {
                 artistName = editingCard.artistName
                 description = editingCard.description ?? ""
                 backgroundColor = editingCard.backgroundColor
+                iconSize = editingCard.iconSize
                 image = editingCard.image
             }
             .onChange(of: selectedItem) { _, newItem in
@@ -401,7 +437,7 @@ private struct OshiIconCloud: View {
             ZStack {
                 ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
                     let point = positions[index]
-                    let size = iconSize(for: index, unit: unit)
+                    let size = iconSize(for: card, unit: unit)
                     let basePosition = CGPoint(
                         x: center.x + point.x * unit,
                         y: center.y + point.y * unit
@@ -475,10 +511,8 @@ private struct OshiIconCloud: View {
         .onAppear { isFloating = true }
     }
 
-    private func iconSize(for index: Int, unit: CGFloat) -> CGFloat {
-        if index == 0 { return unit * 1.02 }
-        if index < 7 { return unit * 0.94 }
-        return unit * 0.86
+    private func iconSize(for card: Card, unit: CGFloat) -> CGFloat {
+        unit * card.iconSize.scale
     }
 
     private func hexagonalPositions(count: Int) -> [CGPoint] {
