@@ -11,6 +11,7 @@ struct EventView: View {
     @Binding var events: [Event]
     //誰の予定か判定するために、アーティストの情報も受け取る
     @Binding var cards: [Card]
+    @State private var selectedEvent: Event?
     
     var body: some View {
         NavigationStack {
@@ -46,6 +47,14 @@ struct EventView: View {
                                 Text(event.title)
                                     .font(.system(size: 18, weight: .semibold, design: .rounded))
 
+                                EventTimeSummary(event: event)
+
+                                if let locationName = event.locationName, !locationName.isEmpty {
+                                    Label(locationName, systemImage: "mappin.and.ellipse")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
                                 if let details = event.details, !details.isEmpty {
                                     Text(details)
                                         .font(.subheadline)
@@ -54,6 +63,10 @@ struct EventView: View {
                                 }
                             }
                             .padding(.vertical, 10)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                selectedEvent = event
+                            }
                             .listRowBackground(Color.white.opacity(0.24))
                             .listRowSeparatorTint(.white.opacity(0.52))
                         }
@@ -63,6 +76,9 @@ struct EventView: View {
                 }
             }
             .navigationTitle("すべての予定")
+            .sheet(item: $selectedEvent) { event in
+                EventDetailView(event: event)
+            }
         }
     }
     

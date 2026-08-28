@@ -3,17 +3,20 @@ import MapKit
 
 // MARK: - 1. Event Model
 struct Event: Identifiable, Equatable {
-    let id: UUID = UUID()
+    var id: UUID = UUID()
     var artistID: UUID
     var date: Date
+    var doorsAt: Date? = nil
     var title: String
     var details: String?
     var locationName: String?
+    var sourceURL: URL? = nil
     var coordinate: CLLocationCoordinate2D?
     
     static func == (lhs: Event, rhs: Event) -> Bool {
         lhs.id == rhs.id &&
         lhs.date == rhs.date &&
+        lhs.doorsAt == rhs.doorsAt &&
         lhs.title == rhs.title &&
         lhs.details == rhs.details &&
         lhs.locationName == rhs.locationName
@@ -32,6 +35,7 @@ struct CalendarView: View {
     @State private var showAddEventSheet: Bool = false
     @State private var editingEvent: Event? = nil
     @State private var showChatSheet: Bool = false
+    @State private var viewingEvent: Event?
 
     let columns = Array(repeating: GridItem(.flexible()), count: 7)
     
@@ -146,22 +150,17 @@ struct CalendarView: View {
                                         VStack(alignment: .leading, spacing: 7) {
                                             Text(event.title)
                                                 .font(.body.weight(.semibold))
+                                            EventTimeSummary(event: event)
                                             if let location = event.locationName, !location.isEmpty {
-                                                Button {
-                                                    openMap(locationName: location)
-                                                } label: {
-                                                    Label(location, systemImage: "mappin.and.ellipse")
-                                                        .font(.caption)
-                                                }
-                                                .buttonStyle(.plain)
+                                                Label(location, systemImage: "mappin.and.ellipse")
+                                                    .font(.caption)
                                             }
                                         }
                                         .padding(.vertical, 5)
                                         .contentShape(Rectangle())
                                         .listRowBackground(Color.white.opacity(0.18))
                                         .onTapGesture {
-                                            editingEvent = event
-                                            showAddEventSheet = true
+                                            viewingEvent = event
                                         }
                                     }
                                     .onDelete { indexSet in
@@ -213,7 +212,13 @@ struct CalendarView: View {
                 }
             }
             .sheet(isPresented: $showChatSheet) {
-                ChatBotView(events: $events, selectedArtistID: selectedArtistID)
+                ChatBotView(
+                    events: $events,
+                    selectedArtistID: selectedArtistID
+                ) { eventDate in
+                    selectedDate = eventDate
+                    currentMonth = eventDate
+                }
                     .presentationDetents([.medium, .large])
             }
             .sheet(isPresented: $showAddEventSheet) {
@@ -224,6 +229,15 @@ struct CalendarView: View {
                         }
                     } else {
                         events.append(newEvent)
+                    }
+                }
+            }
+            .sheet(item: $viewingEvent) { event in
+                EventDetailView(event: event) {
+                    viewingEvent = nil
+                    editingEvent = event
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                        showAddEventSheet = true
                     }
                 }
             }
@@ -250,13 +264,13 @@ struct CalendarView: View {
     }
     
     func openMap(locationName: String) {
-        let geocoder = CLGeocoder()
-        geocoder.geocodeAddressString(locationName) { placemarks, error in
-            if let placemark = placemarks?.first {
-                let mapItem = MKMapItem(placemark: MKPlacemark(placemark: placemark))
-                mapItem.name = locationName
-                
-                
+        Task {
+            let request = MKLocalSearch.Request()
+            request.naturalLanguageQuery = locationName
+            request.resultTypes = [.address, .pointOfInterest]
+
+            if let response = try? await MKLocalSearch(request: request).start(),
+               let mapItem = response.mapItems.first {
                 mapItem.openInMaps()
             }
         }
@@ -295,14 +309,26 @@ struct CalendarView: View {
 // MARK: - 3. ChatBotView (追加)
 struct ChatBotView: View {
     @Environment(\.dismiss) var dismiss
-    @State private var messages: [ChatMessage] = [ChatMessage(text: "アーティスト名やイベント情報を教えてね", isUser: false)]
+    @State private var messages: [ChatMessage]
     @State private var inputText = ""
     @State private var isSearching = false
     @Binding var events: [Event]
     var selectedArtistID: UUID?
-    
-    // APIキーは適切に管理してください
-    let apiKey = "app-qeFpWiJUGrwqhjX0ClgOi1au"
+    let onEventsAdded: (Date) -> Void
+    private let apiClient = ChatbotAPIClient()
+
+    init(
+        events: Binding<[Event]>,
+        selectedArtistID: UUID?,
+        onEventsAdded: @escaping (Date) -> Void = { _ in }
+    ) {
+        _events = events
+        self.selectedArtistID = selectedArtistID
+        self.onEventsAdded = onEventsAdded
+        _messages = State(
+            initialValue: ChatHistoryStore.load()
+        )
+    }
 
     var body: some View {
         NavigationStack {
@@ -320,7 +346,7 @@ struct ChatBotView: View {
                             }
                         }
                         if isSearching {
-                            HStack { ProgressView().padding(.leading, 12); Text("Difyが思考中...").font(.caption).foregroundColor(.secondary); Spacer() }
+                            HStack { ProgressView().padding(.leading, 12); Text("予定を確認中...").font(.caption).foregroundColor(.secondary); Spacer() }
                         }
                     }.padding()
                 }
@@ -339,106 +365,103 @@ struct ChatBotView: View {
     }
     
     func sendMessage() {
-        let text = inputText
-        messages.append(ChatMessage(text: text, isUser: true))
+        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        appendMessage(ChatMessage(text: text, isUser: true))
         inputText = ""
         isSearching = true
-        fetchFromDify(text: text)
-    }
-    
-    // Dify APIを直接呼び出す
-    func fetchFromDify(text: String) {
-        guard let url = URL(string: "https://api.dify.ai/v1/chat-messages") else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        let body: [String: Any] = [
-            "inputs": [:],
-            "query": text,
-            "response_mode": "blocking",
-            "user": "ios_client"
-        ]
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        URLSession.shared.dataTask(with: request) { data, _, _ in
-            guard let data = data,
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let answer = json["answer"] as? String else {
-                DispatchQueue.main.async { self.isSearching = false; self.messages.append(ChatMessage(text: "通信エラーが発生したよ", isUser: false)) }
-                return
-            }
-            handleDifyResponse(jsonString: answer)
-        }.resume()
-    }
-    
-    // 返ってきた文字列（JSON）をパースしてイベント追加
-    func handleDifyResponse(jsonString: String) {
-        DispatchQueue.main.async {
-            self.isSearching = false
-            
-            // 1. Markdown装飾を消す
-            let cleanJson = jsonString
-                .replacingOccurrences(of: "```json", with: "")
-                .replacingOccurrences(of: "```", with: "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            
-            guard let data = cleanJson.data(using: .utf8) else { return }
-            
-            // 2. まず配列として解析を試みる
-            if let results = try? JSONDecoder().decode([AIResult].self, from: data) {
-                self.processResults(results)
-            }
-            // 配列で失敗したら、単体オブジェクトとして解析を試みる
-            else if let singleResult = try? JSONDecoder().decode(AIResult.self, from: data) {
-                self.processResults([singleResult])
-            }
-            else {
-                self.messages.append(ChatMessage(text: "AIからの回答: \(jsonString)", isUser: false))
-            }
+        Task {
+            await fetchEvents(text: text)
         }
     }
 
-   
-    func processResults(_ results: [AIResult]) {
-        var count = 0
-        for result in results {
-            if result.is_event, let dateString = result.date, let date = parseDate(dateString) {
-                let newEvent = Event(artistID: selectedArtistID ?? UUID(),
-                                     date: date,
-                                     title: result.title ?? "ライブ",
-                                     details: result.details,
-                                     locationName: result.location)
-                events.append(newEvent)
-                count += 1
-            }
+    private func fetchEvents(text: String) async {
+        guard let selectedArtistID else {
+            isSearching = false
+            appendMessage(ChatMessage(text: "先に推しを選択してください。", isUser: false))
+            return
         }
-        if count > 0 {
-            messages.append(ChatMessage(text: "\(count)件のライブをカレンダーに追加したよ！", isUser: false))
-        } else {
-            messages.append(ChatMessage(text: "予定が見つかったよ", isUser: false))
+
+        defer { isSearching = false }
+        do {
+            let response = try await apiClient.findEvents(message: text)
+            var addedCount = 0
+            var addedDates: [Date] = []
+            var existingDates: [Date] = []
+            var confirmationCandidates: [String] = []
+            for backendEvent in response.events {
+                if backendEvent.requiresConfirmation == true {
+                    confirmationCandidates.append(
+                        "\(backendEvent.title)\n\(backendEvent.startAt)\n\(backendEvent.sourceURL)"
+                    )
+                    continue
+                }
+                guard let date = backendEvent.date else { continue }
+                let isDuplicate = events.contains { existingEvent in
+                    existingEvent.artistID == selectedArtistID
+                        && existingEvent.title == backendEvent.title
+                        && Calendar.current.isDate(existingEvent.date, inSameDayAs: date)
+                        && existingEvent.locationName == backendEvent.locationName
+                }
+                if isDuplicate {
+                    existingDates.append(date)
+                    continue
+                }
+
+                events.append(
+                    Event(
+                        artistID: selectedArtistID,
+                        date: date,
+                        doorsAt: backendEvent.doorsDate,
+                        title: backendEvent.title,
+                        details: backendEvent.eventDetails,
+                        locationName: backendEvent.locationName,
+                        sourceURL: URL(string: backendEvent.sourceURL)
+                    )
+                )
+                addedCount += 1
+                addedDates.append(date)
+            }
+
+            let destinationDate = (addedDates + existingDates).min()
+            if let destinationDate {
+                onEventsAdded(destinationDate)
+            }
+            let resultMessage: String
+            if addedCount > 0 {
+                resultMessage = "\(response.message) カレンダーに\(addedCount)件追加し、該当月を表示しました。"
+            } else if !existingDates.isEmpty {
+                resultMessage = "\(response.message) すべて登録済みです。該当月を表示しました。"
+            } else if !response.events.isEmpty && confirmationCandidates.isEmpty {
+                resultMessage = "\(response.message) 日付を読み取れず、カレンダーへ追加できませんでした。"
+            } else {
+                resultMessage = response.message
+            }
+            appendMessage(ChatMessage(text: resultMessage, isUser: false))
+            if !confirmationCandidates.isEmpty {
+                appendMessage(
+                    ChatMessage(
+                        text: "AI検索の要確認候補:\n\n" + confirmationCandidates.joined(separator: "\n\n"),
+                        isUser: false
+                    )
+                )
+            }
+            if !response.warnings.isEmpty {
+                appendMessage(ChatMessage(text: response.warnings.joined(separator: "\n"), isUser: false))
+            }
+        } catch {
+            appendMessage(
+                ChatMessage(
+                    text: error.localizedDescription,
+                    isUser: false
+                )
+            )
         }
     }
-    
-    func parseDate(_ dateString: String) -> Date? {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0) // GMTで統一
-        
-        // 許容するフォーマットリスト
-        let formats = [
-            "yyyy-MM-dd",
-            "yyyy/MM/dd",
-            "yyyy-MM-dd'T'HH:mm:ss",
-            "yyyy-MM-dd HH:mm:ss"
-        ]
-        
-        for format in formats {
-            formatter.dateFormat = format
-            if let date = formatter.date(from: dateString) { return date }
-        }
-        return nil
+
+    private func appendMessage(_ message: ChatMessage) {
+        messages.append(message)
+        ChatHistoryStore.save(messages)
     }
 }
 
@@ -626,6 +649,9 @@ struct AddEventSheet: View {
     @State private var title: String = ""
     @State private var details: String = ""
     @State private var locationName: String = ""
+    @State private var eventStartTime = Date()
+    @State private var doorsTime = Date()
+    @State private var hasDoorsTime = false
     @State private var notifyTime = Date()
     @State private var isNotificationOn = false
     @State private var showAlert = false
@@ -638,6 +664,21 @@ struct AddEventSheet: View {
                 Section("タイトル") { TextField("タイトル", text: $title) }
                 Section("詳細") { TextEditor(text: $details).frame(height: 100) }
                 Section("場所") { TextField("場所の名前", text: $locationName) }
+                Section("時間") {
+                    DatePicker(
+                        "開演",
+                        selection: $eventStartTime,
+                        displayedComponents: .hourAndMinute
+                    )
+                    Toggle("開場時間を設定", isOn: $hasDoorsTime)
+                    if hasDoorsTime {
+                        DatePicker(
+                            "開場",
+                            selection: $doorsTime,
+                            displayedComponents: .hourAndMinute
+                        )
+                    }
+                }
                 DatePicker(
                     "通知時間",
                     selection: $notifyTime,
@@ -661,12 +702,19 @@ struct AddEventSheet: View {
                 
                 ToolbarItem(placement: .confirmationAction) {
                     Button(event == nil ? "追加" : "保存") {
+                        let startDate = combinedDate(day: date, time: eventStartTime)
+                        let doorsDate = hasDoorsTime
+                            ? combinedDate(day: date, time: doorsTime)
+                            : nil
                         let newEvent = Event(
-                            artistID: selectedArtistID ?? UUID(),
-                            date: date,
+                            id: event?.id ?? UUID(),
+                            artistID: event?.artistID ?? selectedArtistID ?? UUID(),
+                            date: startDate,
+                            doorsAt: doorsDate,
                             title: title,
                             details: details,
-                            locationName: locationName
+                            locationName: locationName,
+                            sourceURL: event?.sourceURL
                         )
                         let calendar = Calendar.current
                         
@@ -719,6 +767,11 @@ struct AddEventSheet: View {
                     title = event.title
                     details = event.details ?? ""
                     locationName = event.locationName ?? ""
+                    eventStartTime = event.date
+                    if let doorsAt = event.doorsAt {
+                        doorsTime = doorsAt
+                        hasDoorsTime = true
+                    }
                 }
             }
             .alert("通知設定", isPresented: $showAlert) {
@@ -730,48 +783,50 @@ struct AddEventSheet: View {
             }
         }
     }
+
+    private func combinedDate(day: Date, time: Date) -> Date {
+        let calendar = Calendar.current
+        let dayComponents = calendar.dateComponents([.year, .month, .day], from: day)
+        let timeComponents = calendar.dateComponents([.hour, .minute], from: time)
+        var components = dayComponents
+        components.hour = timeComponents.hour
+        components.minute = timeComponents.minute
+        return calendar.date(from: components) ?? day
+    }
 }
 
 // MARK: - 5. Helper Models
-struct ChatMessage: Identifiable {
-    let id = UUID(); let text: String; let isUser: Bool
-}
-// Bandsintown APIからの複数イベント用
-struct ArtistEvent: Codable {
-    let is_event: Bool
-    let title: String
-    let date: String
-    let location: String
-    let details: String
+struct ChatMessage: Identifiable, Codable {
+    let id: UUID
+    let text: String
+    let isUser: Bool
+
+    init(id: UUID = UUID(), text: String, isUser: Bool) {
+        self.id = id
+        self.text = text
+        self.isUser = isUser
+    }
 }
 
-struct AIResult: Codable {
-    
-    let is_event: Bool
-    let title: String?
-    let date: String?
-    let location: String?
-    let details: String?
-    
-    
-    enum CodingKeys: String, CodingKey {
-        case is_event, title, date, location, details
-    }
-    
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        
-        if let boolVal = try? container.decode(Bool.self, forKey: .is_event) {
-            is_event = boolVal
-        } else if let stringVal = try? container.decode(String.self, forKey: .is_event) {
-            is_event = (stringVal.lowercased() == "true")
-        } else {
-            is_event = false
+private enum ChatHistoryStore {
+    private static let storageKey = "chatHistory.v1"
+    private static let welcomeMessage = ChatMessage(
+        text: "アーティスト名やイベント情報を教えてね",
+        isUser: false
+    )
+
+    static func load() -> [ChatMessage] {
+        guard let data = UserDefaults.standard.data(forKey: storageKey),
+              let messages = try? JSONDecoder().decode([ChatMessage].self, from: data),
+              !messages.isEmpty else {
+            return [welcomeMessage]
         }
-        title = try container.decodeIfPresent(String.self, forKey: .title)
-        date = try container.decodeIfPresent(String.self, forKey: .date)
-        location = try container.decodeIfPresent(String.self, forKey: .location)
-        details = try container.decodeIfPresent(String.self, forKey: .details)
+        return messages
+    }
+
+    static func save(_ messages: [ChatMessage]) {
+        guard let data = try? JSONEncoder().encode(Array(messages.suffix(100))) else { return }
+        UserDefaults.standard.set(data, forKey: storageKey)
     }
 }
 
