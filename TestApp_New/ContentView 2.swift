@@ -427,6 +427,8 @@ private struct OshiIconCloud: View {
     @State private var iconOffsets: [UUID: CGSize] = [:]
     @State private var draggingCardID: UUID?
     @State private var dragOrigin: CGSize = .zero
+    @State private var zoomScale: CGFloat = 1
+    @State private var zoomStartScale: CGFloat = 1
 
     var body: some View {
         GeometryReader { geometry in
@@ -506,9 +508,25 @@ private struct OshiIconCloud: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
+            .scaleEffect(zoomScale)
+            .simultaneousGesture(
+                MagnificationGesture()
+                    .onChanged { magnification in
+                        zoomScale = clampedZoom(zoomStartScale * magnification)
+                    }
+                    .onEnded { magnification in
+                        let finalScale = clampedZoom(zoomStartScale * magnification)
+                        zoomScale = finalScale
+                        zoomStartScale = finalScale
+                    }
+            )
         }
         .clipped()
         .onAppear { isFloating = true }
+    }
+
+    private func clampedZoom(_ scale: CGFloat) -> CGFloat {
+        min(max(scale, 0.65), 2.6)
     }
 
     private func iconSize(for card: Card, unit: CGFloat) -> CGFloat {
