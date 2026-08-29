@@ -36,10 +36,14 @@ Echo.meは、推し活のための予定管理アプリです。
 | **Map** | MapKitで会場を検索してApple Mapsへ |
 
 > [!NOTE]
+> Echo.meのpr動画です♡
+
+https://github.com/user-attachments/assets/cc4cc042-0570-4a68-950e-177db563e5b8
+
+
 > 現在の開発対象は`TestApp_New`です。`TestApp`はリメイク前の旧UIとして残しています。
 >
-> Echo.meのpr動画です。
-> /Users/ui/Desktop/LifelsTech/TestApp_New/docs/assets/echome-demo.mp4
+> 
 
 
 ## 💗 Favorite Features
