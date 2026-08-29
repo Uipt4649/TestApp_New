@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/echome-pink-header.svg" width="100%" alt="Echo.me pink gradient banner">
+  <img src="docs/assets/echome-header.png" width="100%" alt="Echo.me app preview">
 </p>
 
 <h1 align="center">♡Echo.me♡</h1>
