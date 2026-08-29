@@ -5,3 +5,4 @@ __pycache__/
 .pytest_cache/
 *.py[cod]
 backend/data/
+docs/assets/echome-demo.mp4
