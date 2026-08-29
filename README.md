@@ -2,7 +2,7 @@
   <img src="docs/assets/echome-pink-header.svg" width="100%" alt="Echo.me pink gradient banner">
 </p>
 
-<h1 align="center">⋆｡°✩ Echo.me ✩°｡⋆</h1>
+<h1 align="center">Echo.me</h1>
 
 <p align="center">
   <strong>推しの予定を、かわいく・かしこく・ひとつに。</strong><br>
@@ -17,12 +17,12 @@
 </p>
 
 <p align="center">
-  <sub>୨୧ SwiftUI × FastAPI × Official Event Data ୨୧</sub>
+  <sub>SwiftUI × FastAPI × Official Event Data</sub>
 </p>
 
 ---
 
-## 🎀 What is Echo.me?
+## What is Echo.me?
 
 Echo.meは、推し活のための予定管理アプリです。
 
@@ -30,10 +30,10 @@ Echo.meは、推し活のための予定管理アプリです。
 
 |  |  |
 | --- | --- |
-| 💬 **Search** | チャットで推しの名前を送るだけ |
-| 🎫 **Collect** | 公式情報とイベントAPIから予定を検索 |
-| 🗓️ **Calendar** | 確認できたイベントをカレンダーへ追加 |
-| 📍 **Map** | MapKitで会場を検索してApple Mapsへ |
+| **Search** | チャットで推しの名前を送るだけ |
+| **Collect** | 公式情報とイベントAPIから予定を検索 |
+| **Calendar** | 確認できたイベントをカレンダーへ追加 |
+| **Map** | MapKitで会場を検索してApple Mapsへ |
 
 > [!NOTE]
 > 現在の開発対象は`TestApp_New`です。`TestApp`はリメイク前の旧UIとして残しています。
@@ -43,11 +43,11 @@ Echo.meは、推し活のための予定管理アプリです。
 <table>
   <tr>
     <td width="50%" valign="top">
-      <h3>🫧 Floating Oshi Cloud</h3>
+      <h3>Floating Oshi Cloud</h3>
       推しの写真がふわっと浮かぶホーム画面。アイコンは指で移動でき、2本指で全体を拡大・縮小できます。
     </td>
     <td width="50%" valign="top">
-      <h3>💎 Liquid Glass Cards</h3>
+      <h3>Liquid Glass Cards</h3>
       ピンクや推し色が透ける、シンプルなガラス調カード。写真・名前・メモ・アクセントカラーを編集できます。
     </td>
   </tr>
@@ -57,7 +57,7 @@ Echo.meは、推し活のための予定管理アプリです。
       アーティストごとにアイコンを「小・中・大」から選択。最推しを大きく表示できます。
     </td>
     <td width="50%" valign="top">
-      <h3>✨ AI Assistant</h3>
+      <h3>AI Assistant</h3>
       公開情報から今後のライブや配信を検索。会場・開場・開演時間・公式URLまでまとめます。
     </td>
   </tr>
@@ -72,18 +72,18 @@ Echo.meは、推し活のための予定管理アプリです。
 - チャット履歴を端末内の`UserDefaults`へ保存
 - 重複イベントの抑制と検索結果キャッシュ
 
-## 🍓 How It Works
+## How It Works
 
 ```mermaid
 flowchart LR
-    A["💬 推しの名前を送信"] --> B["🎀 FastAPI"]
+    A["推しの名前を送信"] --> B["FastAPI"]
     B --> C["公式サイト"]
     B --> D["イベントAPI"]
     B --> E["YouTube"]
-    C --> F["🗓️ 予定を整理"]
+    C --> F["予定を整理"]
     D --> F
     E --> F
-    F --> G["📍 MapKit"]
+    F --> G["MapKit"]
 ```
 
 | Layer | Technology |
@@ -93,7 +93,7 @@ flowchart LR
 | Event Sources | Sony Music公式情報 / 公式サイト / Ticketmaster / Bandsintown / YouTube |
 | Local Storage | UserDefaults / SQLite（利用量管理） |
 
-## 🛍️ Project Structure
+## Project Structure
 
 ```text
 .
@@ -109,7 +109,7 @@ flowchart LR
 └── TestApp.xcodeproj/         # 旧Xcodeプロジェクト
 ```
 
-## 🪄 Quick Start
+## Quick Start
 
 ### Requirements
 
@@ -149,7 +149,7 @@ curl http://127.0.0.1:8000/health
 バックエンド起動中は[Swagger UI](http://127.0.0.1:8000/docs)も利用できます。
 
 <details>
-<summary><strong>🍬 Optional API Keys</strong></summary>
+<summary><strong>Optional API Keys</strong></summary>
 
 必要なサービスだけ`backend/.env`へ設定します。
 
@@ -173,7 +173,7 @@ APIキーはSwiftコードや`Info.plist`へ書かず、必ず`backend/.env`へ�
 </details>
 
 <details>
-<summary><strong>📱 Running on a Real Device</strong></summary>
+<summary><strong>Running on a Real Device</strong></summary>
 
 実機ではMacのLAN内IPアドレスを使用します。
 
@@ -196,7 +196,7 @@ uvicorn app.main:app --reload --host 0.0.0.0
 
 </details>
 
-## 🧁 Free-first Setup
+## Free-first Setup
 
 予期しない課金を避けたい場合の推奨設定です。
 
@@ -208,7 +208,7 @@ uvicorn app.main:app --reload --host 0.0.0.0
 
 YouTube検索は24時間キャッシュされ、バックエンド1プロセスあたり1日80回までに制限されています。外部サービスの無料枠や利用規約は変更される可能性があるため、利用前に各管理画面も確認してください。
 
-## 🧪 Tests
+## Tests
 
 <details>
 <summary><strong>Backend tests</strong></summary>
@@ -236,7 +236,7 @@ xcodebuild \
 
 </details>
 
-## 💌 Event Policy
+## Event Policy
 
 - 公式情報やイベントAPIで日時を確認できた予定だけを登録します
 - 同一イベントは取得元ID、日時、タイトルなどから重複を抑制します
@@ -244,7 +244,7 @@ xcodebuild \
 - 公開情報に存在しない予定を推測して作成しません
 - 検索結果が0件でも、公演が存在しないことを保証するものではありません
 
-## 🩰 Troubleshooting
+## Troubleshooting
 
 <details>
 <summary><strong>Could not connect to the server.</strong></summary>
@@ -276,7 +276,7 @@ cat "${TMPDIR:-/tmp}/echome-backend.log"
 
 </details>
 
-## 🔐 Security
+## Security
 
 - `backend/.env`、`.venv`、キャッシュ、SQLite利用量データはGit管理対象外です
 - APIキーやアプリトークンをGitHubへPushしないでください
@@ -284,7 +284,7 @@ cat "${TMPDIR:-/tmp}/echome-backend.log"
 - ループバック以外では`ALLOW_LOOPBACK_WITHOUT_TOKEN=false`を使用してください
 - 公開サーバーではHTTPS、認証、監視、永続DBなどを別途設計してください
 
-## 🌷 Current Limitations
+## Current Limitations
 
 - 公開されていないイベントは取得できません
 - チケット情報の網羅性は取得元APIと公式掲載状況に依存します
