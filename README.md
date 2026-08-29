@@ -37,6 +37,10 @@ Echo.meは、推し活のための予定管理アプリです。
 
 > [!NOTE]
 > 現在の開発対象は`TestApp_New`です。`TestApp`はリメイク前の旧UIとして残しています。
+>
+> Echo.meのpr動画です。
+> /Users/ui/Desktop/LifelsTech/TestApp_New/docs/assets/echome-demo.mp4
+
 
 ## 💗 Favorite Features
 
